@@ -109,7 +109,7 @@ func _draw() -> void:
 				var camp: Dictionary = frame.camps[u.camp_target]
 				if u.pos.distance_to(camp.pos) <= 75:
 					draw_line(arena_point(u.pos), arena_point(camp.pos), GOLD, 4, true)
-			draw_unit(u, frame.time)
+			draw_unit(u, frame.time, frame.winner)
 	for shot in frame.shots:
 		var p := arena_point(shot.pos)
 		var color := GOLD if shot.ultimate else (BLUE if shot.team == 0 else RED)
@@ -175,7 +175,7 @@ func draw_terrain() -> void:
 		var red: Vector2 = arena_point(MapLayout.BASES[1])-offset
 		draw_line(red, red+Vector2(-4, -9), Color("3f985c"), 4, true)
 
-func draw_unit(u: Dictionary, time: float) -> void:
+func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 	var center := arena_point(u.pos)
 	var radius: float = u.radius*0.82
 	if u.get("jungle_buff", 0) > 0:
@@ -198,18 +198,16 @@ func draw_unit(u: Dictionary, time: float) -> void:
 		draw_arc(center, radius+6, 0, TAU, 48, GREEN, 3, true)
 		draw_circle(center, radius+8, Color(GREEN, 0.08))
 	var token_radius: float = radius + 1
-	draw_texture_rect(portraits[u.portrait], Rect2(center-Vector2.ONE*token_radius, Vector2.ONE*token_radius*2), false, Color(1, 1, 1, 0.35 if u.invisible > 0 else 1.0))
+	draw_texture_rect(host.expressions.texture(u.portrait, host.expressions.resolve(u, time, winner)), Rect2(center-Vector2.ONE*token_radius, Vector2.ONE*token_radius*2), false, Color(1, 1, 1, 0.35 if u.invisible > 0 else 1.0))
+	host.Expressions.draw_fire(self, Rect2(center-Vector2.ONE*token_radius, Vector2.ONE*token_radius*2), u, time)
 	if u.curse > 0 or u.stun > 0:
 		draw_arc(center, token_radius+7, -PI/2, TAU, 6, Color("d5a0ef"), 3, true)
 		label_at("DISABLED" if u.stun > 0 else "CURSED", center+Vector2(-23, -token_radius-15), 9, Color("d5a0ef"))
 	if not u.evolved.is_empty():
 		draw_circle(center+Vector2(token_radius-4, -token_radius+4), 5, GOLD)
-	# Expressions are inexpensive overlays inside the portrait token.
+	# Low-health ring stays outside the supplied portrait artwork.
 	if u.hp / u.max_hp < 0.25:
 		draw_arc(center, radius+1, 0, TAU, 48, GOLD if u.standing else RED, 2, true)
-		if u.portrait == "hazmat":
-			draw_line(center + Vector2(-9, -3), center + Vector2(-3, -1), Color("30223d"), 2)
-			draw_line(center + Vector2(3, -1), center + Vector2(10, -4), Color("30223d"), 2)
 	var aim := Vector2.from_angle(u.facing)
 	var side := aim.orthogonal()
 	var weapon: Vector2 = center + aim * (radius + 1 - u.flash * 22)

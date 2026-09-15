@@ -28,6 +28,7 @@ func _ready() -> void:
 	panel.add_theme_stylebox_override("panel",host.panel_style(Color("111e30")))
 	add_child(panel)
 	text("TEAM BUILDER",Vector2(54,25),Vector2(500,36),26)
+	make_button("Character expressions",Vector2(1110,25),Vector2(260,36),func():host.expression_editor.open())
 	text("Build your next lineup. Games already queued keep their original squad.",Vector2(54,62),Vector2(1050,24),14)
 	text("TEAM NAME",Vector2(54,99),Vector2(260,20),11)
 	draft_name = LineEdit.new()

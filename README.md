@@ -26,6 +26,8 @@ Old saves retain roster and progression; retired equipment becomes empty slots. 
 
 ## Project structure
 
+Open **Team Builder → Character expressions** to upload sheets, preview faces, and customize reaction assignments, durations and low-health thresholds for each hero. Mexai and Hazmat use the supplied sheets with transparent outer backgrounds. Portrait reactions and killstreak flames follow match and replay time. See the [user and agent guide](docs/EXPRESSIONS.md).
+
 - `scripts/catalog.gd`: hero profiles, stats, item descriptions/costs and roster validation.
 - `scripts/battle.gd`: seeded fixed-step simulation and structured event export.
 - `scripts/map_layout.gd`: shared physical map geometry.

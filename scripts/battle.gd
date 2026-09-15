@@ -4,6 +4,7 @@ extends RefCounted
 const STEP := 0.05
 const Catalog = preload("res://scripts/catalog.gd")
 const MapLayout = preload("res://scripts/map_layout.gd")
+const Expressions = preload("res://scripts/expressions.gd")
 const VAULT_HP := 3000.0
 var match_id := ""
 var records: Array = []
@@ -910,6 +911,7 @@ func begin_ultimate(u: Dictionary, target: Dictionary) -> void:
 func record_event(kind: String, actor: int = -1, target: int = -1, value: float = 0, extra: Dictionary = {}) -> void:
 	var u := get_unit(actor)
 	var recipient := get_unit(target)
+	Expressions.record(kind, u, recipient, value, clock)
 	var row := {"match_id": match_id, "time": clock, "kind": kind, "actor": actor, "target": target, "value": value, "x": u.pos.x if not u.is_empty() else 0.0, "y": u.pos.y if not u.is_empty() else 0.0}
 	row["actor_hero"] = u.get("portrait", "")
 	row["actor_team"] = u.get("team", -1)

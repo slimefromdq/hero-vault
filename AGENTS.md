@@ -98,8 +98,8 @@ Fill these in only after inspecting the actual repository.
 | Simulation/combat core | `scripts/battle.gd` |
 | UI/spectator layer | `scripts/app_shell.gd`, `scripts/battle_view.gd` |
 | Automated tests | `tests/*_test.gd` |
-| Formatting/lint tooling | **VERIFY IN REPO** |
-| Asset pipeline | **VERIFY IN REPO** |
+| Formatting/lint tooling | No configured formatter/linter; use git diff --check |
+| Asset pipeline | Godot imports bundled SVG/PNG; custom expression sheets load at runtime (docs/EXPRESSIONS.md) |
 | Save/data compatibility constraints | **VERIFY IN REPO** |
 
 ### Build / run / test commands
@@ -415,28 +415,36 @@ Never leave the next agent with “continue where I left off” and no coordinat
 ## 13. Session Handoff
 
 ### Current objective
-Commit the local Godot project to `slimefromdq/hero-vault`, preserving existing repository history and documentation.
+Character expression uploads, transparent portrait backgrounds, editable reaction rules, and GitHub publication with an agent guide.
 
 ### What changed
-- Added the existing Godot game, hero art, scene, scripts, tests, launcher and implementation notes.
-- Updated README play instructions and verified repository facts in this guide.
-- Existing root-level documentation pages are preserved; current executable behavior and `docs/REWORK_2026-09-15.md` take precedence over older design notes.
+- Added Team Builder → Character expressions: per-hero imports, grid/caption controls, previews, mappings, durations, low-health threshold, save/cancel and default restoration.
+- Removed edge-connected pale backgrounds from Mexai and Hazmat while preserving enclosed white eyes; cached transparent textures preserve proportions.
+- Included the earlier combat expressions and three-kill fire burst across battlefield, lineup and focus portraits.
+- Added the user and implementation guide in [docs/EXPRESSIONS.md](docs/EXPRESSIONS.md), including persistence schema, extension points and testing instructions.
+- GitHub destination: origin/main (slimefromdq/hero-vault). Personal uploads, test fixtures and captures remain under ignored user data.
 
 ### Files changed
-- `AGENTS.md`, `README.md`, `.gitignore`, `play.ps1`, `project.godot`.
-- Added files under `assets/`, `docs/`, `scenes/`, `scripts/`, and `tests/` (see the import commit for the exact manifest).
+- `scripts/expressions.gd`, `scripts/expression_editor.gd` and `.uid` files
+- `scripts/app_shell.gd`, `scripts/battle.gd`, `scripts/battle_view.gd`, `scripts/loadout_panel.gd`
+- `tests/expression_test.gd`, `tests/expression_editor_test.gd` and `.uid` files
+- Both expression-sheet PNGs and `.import` files; retained previous Mexai assortment PNG, `.import` and `.tres` source assets
+- `docs/EXPRESSIONS.md`, `README.md`, `AGENTS.md`
 
 ### Validation run
-- Godot 4.7.2 headless: navigation, rework, battle, ui, map, duel, jungle, handoff and session checks passed.
-- Tests used isolated `.local-data/commit-check/` directories.
+- Godot 4.7.2 headless editor import passed.
+- Expression, expression-editor, UI/navigation, rework, session and battle checks passed. Battle test exercised nine full matches.
+- Native editor capture inspected: cleaned portraits and Save/Cancel controls visible; dialog sizing has a regression check.
+- `git diff --check` passed. Tests used isolated `.local-data/final-*` and `.local-data/import-*` directories.
 
 ### Known problems / warnings
-- Godot reported failure to read the Windows root certificate store; all listed checks passed.
-- Native display/fullscreen validation was not run for this import.
-- Existing SETUP.md describes the original documentation starter; current documentation pages live at repository root.
+- Godot emits the existing Windows root certificate store warning; checks passed.
+- Imports require regular grids; bottom crop handles captions. Pale enclosed areas remain part of the artwork.
+- Editor changes apply immediately to current replay presentation. Prior uploads are retained when replaced.
+- Pre-existing `project.godot` line-ending-only status was preserved; no project setting change is needed.
 
 ### Next recommended action
-Open `project.godot` in Godot 4.7.2 and run the game for a native display smoke check.
+Open Team Builder → Character expressions to import additional heroes or adjust reaction rules.
 
 ---
 ## 14. Decision Log

@@ -4,6 +4,9 @@ const Catalog = preload("res://scripts/catalog.gd")
 const Session = preload("res://scripts/match_session.gd")
 const LoadoutPanel = preload("res://scripts/loadout_panel.gd")
 const BattleView = preload("res://scripts/battle_view.gd")
+const Expressions = preload("res://scripts/expressions.gd")
+var expressions = Expressions.new()
+var expression_editor: AcceptDialog
 const ARENA_RECT := Rect2(322,214,783,410)
 const RIVALS := ["The Night Shift","Copper Company","Velvet Riot"]
 const INK := Color("0a1220")
@@ -71,13 +74,17 @@ var focus_zoom: float:
 			sessions[active_session].views[selected].zoom = value
 
 func _ready() -> void:
+	expressions.load_profiles()
 	for id in Catalog.HERO_IDS:
-		portraits[id] = load("res://assets/"+id+".svg")
+		portraits[id] = expressions.texture(id,expressions.profiles.get(id,{}).get("mapping",{}).get("neutral","neutral"))
 	load_profile()
 	build_pages()
 	loadout_panel = LoadoutPanel.new()
 	loadout_panel.host = self
 	add_child(loadout_panel)
+	expression_editor = preload("res://scripts/expression_editor.gd").new()
+	expression_editor.host = self
+	add_child(expression_editor)
 	show_page("home")
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--autoplay" or arg == "--showcase":
@@ -504,7 +511,8 @@ func draw_game() -> void:
 		var y := 237+i*65
 		if follow_hero == i:
 			box(Rect2(37,y-4,232,61),Color("23364c"))
-		draw_texture_rect(portraits[u.portrait],Rect2(42,y,45,45),false)
+		draw_texture_rect(expressions.texture(u.portrait, expressions.resolve(u, frame.time, frame.winner)),Rect2(42,y,45,45),false)
+		Expressions.draw_fire(self, Rect2(42,y,45,45), u, frame.time)
 		label_at(u.name.left(21),Vector2(98,y+16),14)
 		label_at("L%d / %s" % [u.level,"KO" if u.hp <= 0 else "North" if u.lane == 0 else "South"],Vector2(98,y+34),11,MUTED)
 		bar(Rect2(98,y+44,153,4),u.hp/u.max_hp,BLUE)
@@ -533,6 +541,8 @@ func draw_game() -> void:
 	else:
 		label_at("Live games continue",Vector2(500,696),12,GOLD)
 	box(Rect2(306,738,816,122))
+	draw_texture_rect(expressions.texture(hero.portrait, expressions.resolve(hero, frame.time, frame.winner)), Rect2(1006,752,92,92), false)
+	Expressions.draw_fire(self, Rect2(1006,752,92,92), hero, frame.time)
 	label_at("HERO IN FOCUS / "+hero.name.to_upper(),Vector2(325,767),12,GOLD)
 	label_at(Catalog.HEROES[hero.portrait].kit,Vector2(325,795),17)
 	label_at("Damage: %d  /  Healing: %d  /  Item triggers: %d" % [hero.damage_done,hero.healing_done,hero.item_procs],Vector2(325,827),13,MUTED)
