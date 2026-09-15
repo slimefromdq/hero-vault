@@ -1,0 +1,4 @@
+.godot/
+*.tmp
+qa/
+.local-data/

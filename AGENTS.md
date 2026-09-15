@@ -88,16 +88,16 @@ Fill these in only after inspecting the actual repository.
 
 | Fact | Current value |
 |---|---|
-| Engine / framework | **VERIFY IN REPO** |
-| Engine version | **VERIFY IN REPO** |
-| Primary language(s) | **VERIFY IN REPO** |
-| Default branch | `main` **VERIFY IN REPO** |
-| Main game entry point | **VERIFY IN REPO** |
-| Hero data location | **VERIFY IN REPO** |
-| Item data location | **VERIFY IN REPO** |
-| Simulation/combat core | **VERIFY IN REPO** |
-| UI/spectator layer | **VERIFY IN REPO** |
-| Automated tests | **VERIFY IN REPO** |
+| Engine / framework | Godot |
+| Engine version | 4.7.2 (local executable); project targets 4.7 |
+| Primary language(s) | GDScript |
+| Default branch | `main` |
+| Main game entry point | `project.godot` -> `scenes/main.tscn` |
+| Hero data location | `scripts/catalog.gd` |
+| Item data location | `scripts/catalog.gd` |
+| Simulation/combat core | `scripts/battle.gd` |
+| UI/spectator layer | `scripts/app_shell.gd`, `scripts/battle_view.gd` |
+| Automated tests | `tests/*_test.gd` |
 | Formatting/lint tooling | **VERIFY IN REPO** |
 | Asset pipeline | **VERIFY IN REPO** |
 | Save/data compatibility constraints | **VERIFY IN REPO** |
@@ -106,21 +106,13 @@ Fill these in only after inspecting the actual repository.
 
 Replace placeholders after repo inspection.
 
-```bash
-# Install/setup
-# VERIFY IN REPO
-
-# Run game
-# VERIFY IN REPO
-
-# Run tests
-# VERIFY IN REPO
-
-# Lint/format
-# VERIFY IN REPO
-
-# Optional deterministic simulation / benchmark command
-# VERIFY IN REPO
+```powershell
+# Import project.godot into Godot 4.7.2, or launch with an explicit executable:
+./play.ps1 -GodotPath 'C:\path\to\godot.exe'
+# Run each test with an isolated APPDATA/LOCALAPPDATA directory:
+godot --headless --path . --script res://tests/navigation_test.gd
+# Other headless checks: rework, battle, ui, map, duel, jungle, handoff, session.
+# display_test.gd needs a real display. No formatter/linter is configured.
 ```
 
 An agent must not claim validation succeeded if these commands have not actually been run.
@@ -133,16 +125,15 @@ Keep this section synchronized with the repository. Prefer a short map of archit
 
 ```text
 /
-├─ AGENTS.md                  # this handoff file
-├─ README.md                  # human-facing project intro
-├─ docs/                      # GitHub Pages / design documentation
-│  ├─ index.md
-│  ├─ heroes.md
-│  ├─ systems.md
-│  ├─ items.md
-│  ├─ roadmap.md
-│  └─ agent-handoff.md
-├─ ...                        # VERIFY IN REPO
+|-- project.godot, play.ps1    # game entry and launcher
+|-- scenes/                  # main scene
+|-- scripts/                 # catalog, simulation, navigation and presentation
+|-- assets/                  # SVG hero art and Godot import settings
+|-- tests/                   # GDScript checks
+|-- docs/                    # implementation and historical design notes
+|-- index.md, heroes.md, items.md, systems.md, roadmap.md
+|-- _config.yml              # existing root-level documentation site
+|-- AGENTS.md, README.md     # agent guide and play instructions
 ```
 
 ### Files an incoming coding agent should locate immediately
@@ -423,32 +414,31 @@ Never leave the next agent with “continue where I left off” and no coordinat
 
 ## 13. Session Handoff
 
-Replace this section at the end of each coding session.
-
 ### Current objective
-**UNSET**
+Commit the local Godot project to `slimefromdq/hero-vault`, preserving existing repository history and documentation.
 
 ### What changed
-- Nothing recorded yet.
+- Added the existing Godot game, hero art, scene, scripts, tests, launcher and implementation notes.
+- Updated README play instructions and verified repository facts in this guide.
+- Existing root-level documentation pages are preserved; current executable behavior and `docs/REWORK_2026-09-15.md` take precedence over older design notes.
 
 ### Files changed
-- None recorded yet.
+- `AGENTS.md`, `README.md`, `.gitignore`, `play.ps1`, `project.godot`.
+- Added files under `assets/`, `docs/`, `scenes/`, `scripts/`, and `tests/` (see the import commit for the exact manifest).
 
 ### Validation run
-- None recorded yet.
+- Godot 4.7.2 headless: navigation, rework, battle, ui, map, duel, jungle, handoff and session checks passed.
+- Tests used isolated `.local-data/commit-check/` directories.
 
 ### Known problems / warnings
-- Repository has not yet been inspected for this handoff scaffold.
-- Build/run/test commands are still **VERIFY IN REPO**.
+- Godot reported failure to read the Windows root certificate store; all listed checks passed.
+- Native display/fullscreen validation was not run for this import.
+- Existing SETUP.md describes the original documentation starter; current documentation pages live at repository root.
 
 ### Next recommended action
-1. Inspect the repository.
-2. Fill in Sections 4–5.
-3. Confirm the current implemented hero/item/system data.
-4. Run the project once before making architecture changes.
+Open `project.godot` in Godot 4.7.2 and run the game for a native display smoke check.
 
 ---
-
 ## 14. Decision Log
 
 Add entries only for decisions with future consequences.
