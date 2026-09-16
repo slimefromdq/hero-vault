@@ -1,9 +1,14 @@
 param(
-    [string]$GodotPath = 'C:\Users\lukep\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64.exe'
+    # Path to the Godot 4.7.2 executable. Defaults to $env:GODOT, then `godot` on PATH.
+    [string]$GodotPath = $env:GODOT
 )
 $ErrorActionPreference = 'Stop'
-if (-not (Test-Path -LiteralPath $GodotPath -PathType Leaf)) {
-    throw 'Godot executable not found. Pass -GodotPath with the path to Godot 4.7.2.'
+if (-not $GodotPath) {
+    $found = Get-Command godot -ErrorAction SilentlyContinue
+    if ($found) { $GodotPath = $found.Source }
+}
+if (-not $GodotPath -or -not (Test-Path -LiteralPath $GodotPath -PathType Leaf)) {
+    throw 'Godot executable not found. Pass -GodotPath, set the GODOT environment variable, or put godot on PATH.'
 }
 $previousAppData = $env:APPDATA
 $previousLocalAppData = $env:LOCALAPPDATA

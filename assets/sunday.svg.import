@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://hj20gx31nghh"
-path="res://.godot/imported/atlas.svg-d6d2a905773a0b4de951a2f977c51323.ctex"
+uid="uid://ddjah5wiuvys7"
+path="res://.godot/imported/sunday.svg-243c13b06b857a56bc9993c44ff4b962.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/atlas.svg"
-dest_files=["res://.godot/imported/atlas.svg-d6d2a905773a0b4de951a2f977c51323.ctex"]
+source_file="res://assets/sunday.svg"
+dest_files=["res://.godot/imported/sunday.svg-243c13b06b857a56bc9993c44ff4b962.ctex"]
 
 [params]
 

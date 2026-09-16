@@ -9,7 +9,7 @@ title: Systems
 
 ## Simulation
 
-The simulation should make outcomes variable without making them opaque. Seeded randomness and inspectable event logging are preferred where supported by the codebase.
+A fixed-step (0.05s) simulation with one seeded random-number generator. The same seed and squads always produce the same match. The camera and UI never change combat state.
 
 ## Combat readability
 
@@ -21,28 +21,20 @@ Useful questions for any combat rule:
 
 ## Progression
 
-Current target: **13 hero levels**.
-
-The repository remains the source of truth for:
-- XP thresholds;
-- per-level stat growth;
-- unlock timing;
-- whether modes/items can modify the cap.
+Heroes level from **1 to 13**. Each level needs `level × 6` XP from nearby creep deaths (1), hero takedowns (3) and jungle camps (6). Each level adds hero-specific HP and damage. Some items evolve at levels 9 or 13.
 
 ## Ultimates
 
-Current direction: ultimates use **long timers/cooldowns** rather than charge meters.
+Ultimates use **long timers** (75–120s) that keep running through death. Each hero has its own conditions for when to spend a ready ultimate, and the CSV records how long it was held.
+
+## Hits and misses
+
+Ranged attacks are real projectiles that can miss moving targets; heroes sidestep visible shots. Melee attacks have a windup and miss if the target leaves range. Crash Test's charge can be sidestepped.
+
+## Stability and collisions
+
+Every hero has a Stability rating (1–10) that scales how far knockbacks push them. A hero pushed into the lane edge takes a wall slam (small damage and a brief stun). Crash Test has Stability 1 and is built for crashes.
 
 ## Statistics and events
 
-When practical, systems should emit structured events for:
-- damage;
-- healing;
-- kills/deaths;
-- ability use;
-- item pickup/drop/transfer;
-- level-ups;
-- ultimate use;
-- notable objective interactions.
-
-This supports debugging, replays, spectator UI, and post-match analysis.
+Every match records structured events (damage, healing, kills, casts, projectile hits and misses, item activations, thefts, evolutions, cloak reveals and gank outcomes, Idol possession) and exports them as CSV for analysis in R.

@@ -17,7 +17,7 @@ func clean():
 	return b
 func _init() -> void:
 	check(Catalog.validate_definitions() == "", "Roster definitions validate")
-	check(Catalog.ITEM_IDS.size() == 10 and not Catalog.ITEMS.has("idol"), "Nine purchasable items; no shop Idol")
+	check(not Catalog.ITEMS.has("idol") and not "idol" in Catalog.ITEM_IDS, "Double Damage Idol is never purchasable")
 	for rival in range(3):
 		check(Catalog.validate(Catalog.enemy_team(rival),Catalog.enemy_items(rival)) == "", "Rival equipment fits shared budget")
 	var gear := Catalog.DEFAULT_ITEMS.duplicate(true)

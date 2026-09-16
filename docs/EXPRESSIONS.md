@@ -58,7 +58,7 @@ Run Godot 4.7.2 with isolated APPDATA and LOCALAPPDATA directories:
 ```powershell
 & $GodotPath --headless --path . --script res://tests/expression_test.gd
 & $GodotPath --headless --path . --script res://tests/expression_editor_test.gd
-& $GodotPath --headless --path . --script res://tests/ui_test.gd
+& $GodotPath --headless --path . --script res://tests/navigation_test.gd
 & $GodotPath --headless --path . --script res://tests/rework_test.gd
 ```
 

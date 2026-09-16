@@ -22,7 +22,7 @@ func run() -> void:
 	scene.queue_games()
 	key.keycode = KEY_1
 	scene._input(key)
-	assert(scene.follow_hero == 0, "1 should follow Rally")
+	assert(scene.follow_hero == 0, "1 should follow the first hero")
 	key.keycode = KEY_ESCAPE
 	scene._input(key)
 	assert(scene.follow_hero == -1 and root.mode == Window.MODE_FULLSCREEN, "First Escape restores overview")

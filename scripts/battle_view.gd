@@ -10,6 +10,7 @@ const GOLD := Color("ffd387")
 const BLUE := Color("83bbff")
 const RED := Color("f49bae")
 const GREEN := Color("8cddc6")
+const SUN := Color("ffe08a")
 
 var host: Node2D
 var font: Font = ThemeDB.fallback_font
@@ -67,8 +68,18 @@ func _draw() -> void:
 	draw_set_transform(VIEW_CENTER - camera_center * camera_zoom, 0, Vector2.ONE * camera_zoom)
 	draw_terrain()
 	for field in frame.get("fields", []):
-		draw_circle(arena_point(field.pos), field.radius*0.82, Color(0.9, 0.15, 0.18, 0.2))
-		draw_arc(arena_point(field.pos), field.radius*0.82, 0, TAU, 48, Color("e15b62"), 2, true)
+		# Red = Hazmat gas (also cuts healing); orange = fire; gold = BEAUTIFUL DAY.
+		var kind: String = field.get("kind", "gas")
+		if kind == "sun":
+			var glow := arena_point(field.pos)
+			draw_circle(glow, field.radius*0.82, Color(SUN, 0.16))
+			draw_circle(glow, field.radius*0.55, Color(1, 1, 0.9, 0.08))
+			draw_arc(glow, field.radius*0.82, 0, TAU, 64, SUN, 3, true)
+			label_at("BEAUTIFUL DAY", glow+Vector2(-40, -field.radius*0.82-6), 10, SUN)
+			continue
+		var tint := Color("f08a3c") if kind == "fire" else Color("e15b62")
+		draw_circle(arena_point(field.pos), field.radius*0.82, Color(tint, 0.2))
+		draw_arc(arena_point(field.pos), field.radius*0.82, 0, TAU, 48, tint, 2, true)
 	draw_camps(frame)
 	draw_crown(frame)
 	for tower in frame.towers:
@@ -113,6 +124,15 @@ func _draw() -> void:
 	for shot in frame.shots:
 		var p := arena_point(shot.pos)
 		var color := GOLD if shot.ultimate else (BLUE if shot.team == 0 else RED)
+		if shot.get("kind", "bolt") == "orb":
+			# Flare: big, slow and easy to read.
+			draw_circle(p, 24, Color(SUN, 0.18))
+			draw_circle(p, 13, SUN)
+			continue
+		if shot.get("splash", 0.0) > 0:
+			draw_circle(p, 7, Color(SUN, 0.35))
+			draw_circle(p, 4, SUN)
+			continue
 		draw_line(p - shot.direction * (28 if shot.ultimate else 12), p, color, 7 if shot.ultimate else 3, true)
 		if shot.ultimate:
 			draw_circle(p, 13, Color(GOLD, 0.15))
@@ -178,6 +198,15 @@ func draw_terrain() -> void:
 func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 	var center := arena_point(u.pos)
 	var radius: float = u.radius*0.82
+	var flight: Dictionary = u.get("flight", {})
+	if not flight.is_empty():
+		# FULL SEND: shadow on the ground, token high in the arc, landing marker.
+		var t: float = clampf(flight.time/flight.total, 0, 1)
+		var landing := arena_point(flight.to)
+		draw_arc(landing, 62, 0, TAU, 32, Color(RED if u.team == 1 else BLUE, 0.7), 2, true)
+		label_at("INCOMING", landing+Vector2(-26, -66), 10, GOLD)
+		draw_circle(center, radius*(0.6+0.4*(1.0-sin(PI*t))), Color(0, 0, 0, 0.35))
+		center += Vector2(0, -sin(PI*t)*80)
 	if u.get("jungle_buff", 0) > 0:
 		draw_arc(center, radius+7, 0, TAU, 32, GOLD if u.buff_kind == "power" else GREEN, 3, true)
 	var color := BLUE if u.team == 0 else RED
@@ -202,7 +231,7 @@ func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 	host.Expressions.draw_fire(self, Rect2(center-Vector2.ONE*token_radius, Vector2.ONE*token_radius*2), u, time)
 	if u.curse > 0 or u.stun > 0:
 		draw_arc(center, token_radius+7, -PI/2, TAU, 6, Color("d5a0ef"), 3, true)
-		label_at("DISABLED" if u.stun > 0 else "CURSED", center+Vector2(-23, -token_radius-15), 9, Color("d5a0ef"))
+		label_at("DISABLED" if u.stun > 0 else "STITCHED", center+Vector2(-23, -token_radius-15), 9, Color("d5a0ef"))
 	if not u.evolved.is_empty():
 		draw_circle(center+Vector2(token_radius-4, -token_radius+4), 5, GOLD)
 	# Low-health ring stays outside the supplied portrait artwork.
@@ -221,12 +250,28 @@ func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 		draw_colored_polygon(PackedVector2Array([weapon-side*3,weapon+aim*14,weapon+side*3]),Color("d1edee"))
 	elif u.portrait == "oddity":
 		draw_arc(weapon+aim*4, 5, 0, TAU, 5, Color("dcb9fa"),2,true)
+	elif u.portrait == "poppet":
+		draw_line(weapon, weapon+aim*16, Color("e8e2d0"), 2, true)
+	elif u.portrait == "crash_test":
+		draw_rect(Rect2(weapon+aim*2-Vector2(5, 5), Vector2(10, 10)), Color("f2c230"))
+	elif u.portrait == "kiln":
+		draw_circle(weapon+aim*4, 5, Color("f08a3c"))
+	elif u.portrait == "sunday":
+		draw_arc(weapon+aim*4, 4, 0, TAU, 12, SUN, 2, true)
 	else:
 		draw_circle(weapon+aim*3, 5, GOLD)
 	if u.flash > 0:
 		draw_arc(center,radius+8,u.facing-0.6,u.facing+0.6,12,GOLD,3,true)
 	if u.get("blood_rush",0) > 0:
 		draw_arc(center,radius+4,0,TAU,32,RED,2,true)
+	if u.get("program",0) > 0:
+		draw_arc(center,radius+10+sin(time*20)*2,0,TAU,24,Color("f2c230"),3,true)
+		label_at("CRASH PROGRAM",center+Vector2(-36,radius+34),8,Color("f2c230"))
+	if u.get("safety",0) > 0:
+		draw_rect(Rect2(center-Vector2.ONE*(radius+6), Vector2.ONE*(radius+6)*2), Color("9aa5b1"), false, 3)
+	if u.get("warmth",0) > 0:
+		draw_circle(center,130*0.82,Color(SUN,0.07))
+		draw_arc(center,130*0.82,0,TAU,48,Color(SUN,0.5),2,true)
 	if u.get("hold_line",0) > 0:
 		draw_arc(center,140*0.82,0,TAU,48,Color(GREEN,0.4),2,true)
 	if u.get("kill_streak",0) > 0:

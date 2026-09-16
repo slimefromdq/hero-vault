@@ -7,26 +7,25 @@ title: Roadmap
 
 [Overview](./) · [Heroes](heroes.html) · [Systems](systems.html) · [Items](items.html) · [Roadmap](roadmap.html) · [Agent Handoff](agent-handoff.html)
 
-This page should stay short and current. Do not turn it into a graveyard of every idea ever discussed.
+This page should stay short and current.
 
-## Now
+## Done (September 2026)
 
-- Inspect the repository and replace all `VERIFY IN REPO` placeholders in `AGENTS.md`.
-- Confirm the current implemented hero roster.
-- Confirm the current item roster.
-- Document the actual build/run/test commands.
-- Verify 13-level progression and ultimate timer behavior in code.
-- Verify how randomness and projectile misses are implemented.
+- Tabbed app, three-game sets, character expressions.
+- Poppet, Crash Test, Kiln and Sunday. Crash Test and Sunday follow their design sheets.
+- Stability, knockback and wall collisions.
+- Ambush Shield, Invisible Cloak, Lane Rations, Scout Pin, Tempered Sole.
+- One-time burst evolution for six items.
 
 ## Next
 
-- Add deterministic simulation/debug seeds if missing.
-- Improve structured match-event logging if missing.
-- Add statistical sanity tests for probabilistic mechanics.
-- Keep hero and item pages synchronized with implemented content.
+- Final designs for Poppet and Kiln; tune numbers with `tools/balance_probe.gd`.
+- Spectator world objects beyond the Idol (for example Cooldown Shard, Treasure Goblin), with about three active per match.
+- Match history for important objects (holders, time held, kills while held).
+- Statistical sanity tests over many seeded matches.
 
 ## Later
 
-- Expand the public-facing hero encyclopedia.
-- Surface match statistics and entertaining historical records.
-- Add screenshots/GIFs once presentation systems stabilize.
+- Superhero tank-carry archetype (parked).
+- Shark pirate and the cloning mascot concept.
+- R dashboard for exported CSVs; screenshots/GIFs on this site.

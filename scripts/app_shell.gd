@@ -522,11 +522,12 @@ func draw_game() -> void:
 	label_at("ULT / %ds" % int(ceil(hero.ultimate)) if hero.ultimate > 0 else "ULT / READY",Vector2(42,666),13,GOLD)
 	label_at("MATCH EQUIPMENT",Vector2(42,701),11,MUTED)
 	for i in range(hero.items.size()):
-		var title: String = Catalog.ITEMS[hero.items[i]].name
+		var item_id: String = hero.items[i]
+		var title: String = Catalog.item_name(item_id, item_id in hero.evolved)
 		var stolen := false
 		for loan in frame.get("thefts",[]):
 			stolen = stolen or (loan.owner == hero.id and loan.slot == i)
-		label_at(title+(" [STOLEN]" if stolen else ""),Vector2(42,731+i*25),12,RED if stolen else TEXT)
+		label_at(title+(" [STOLEN]" if stolen else ""),Vector2(42,731+i*25),12,RED if stolen else (GOLD if item_id in hero.evolved else TEXT))
 	label_at("%d kills / %d deaths" % [hero.kills,hero.deaths],Vector2(42,801),14)
 	label_at("Saved-team edits apply to new games.",Vector2(42,838),10,MUTED)
 	box(Rect2(306,168,816,555),Color("101c2a"))
@@ -583,6 +584,9 @@ func load_profile() -> void:
 	if value is Dictionary:
 		queue_number = maxi(account.matches, int(value.get("queue_number", 0)))
 		var saved_team = value.get("team", Catalog.DEFAULT_TEAM)
+		# Retired heroes are replaced one-for-one so the rest of the roster survives.
+		if saved_team is Array:
+			saved_team = Catalog.migrate_team(saved_team)
 		var saved_items = value.get("equipment", Catalog.DEFAULT_ITEMS)
 		# Retain the user's roster while replacing retired equipment with empty slots.
 		if saved_items is Array:

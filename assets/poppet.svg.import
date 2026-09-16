@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://0c71tks0c7hv"
-path="res://.godot/imported/rook.svg-93f8a47328f32f5b8a6ad5eecec19e4d.ctex"
+uid="uid://dmjf3gkrybvt6"
+path="res://.godot/imported/poppet.svg-d9351d8c075754b413853ed3983fec2d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/rook.svg"
-dest_files=["res://.godot/imported/rook.svg-93f8a47328f32f5b8a6ad5eecec19e4d.ctex"]
+source_file="res://assets/poppet.svg"
+dest_files=["res://.godot/imported/poppet.svg-d9351d8c075754b413853ed3983fec2d.ctex"]
 
 [params]
 

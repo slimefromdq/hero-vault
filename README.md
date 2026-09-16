@@ -4,43 +4,45 @@ A Godot 4.7.2 MOBA autobattler and spectator simulation. Choose five heroes, ass
 
 ## Play
 
-Run `./play.ps1` or import `project.godot` into Godot 4.7.2 and press F5. Use the permanent **Team Builder** tab to choose heroes, items, lanes and strategy, then **Save Team**. Return **Home** and choose **Queue 3 Games**. The starter lineup costs **17/18** points, with two distinct item slots per hero.
+Run `./play.ps1` (it uses `-GodotPath`, the `GODOT` environment variable, or `godot` on your PATH), or import `project.godot` into Godot 4.7.2 and press F5. The launcher keeps saves under `.local-data/`.
 
-F11 toggles fullscreen. Click a hero or press 1–5 to follow; scroll to zoom. Press 0/Escape to restore overview. Each game gets a separate tab. Build your next team while queued games continue; saved edits never change an existing lineup. Close and reopen game tabs from Home without resetting games. Pause/speed controls affect only that queued set. Highlights, saved progression and CSV exports remain available.
+Use the **Team Builder** tab to choose heroes, items, lanes and strategy, then **Save Team**. Return **Home** and choose **Queue 3 Games**. The starter lineup costs **17/18** points, with two distinct item slots per hero. Hover an item to see what it evolves into.
 
-## Tabbed navigation
+F11 toggles fullscreen. Click a hero or press 1–5 to follow; scroll to zoom; 0/Escape restores the overview. Each game gets its own tab and keeps running while you build your next team. Pause/speed controls affect only that queued set. See [navigation notes](docs/TABBED_UI.md).
 
-Home, Team Builder and game views are separate pages. Up to three sets (nine local games) may run concurrently. Team drafts survive tab switches; save explicitly before queuing. Completed tabs keep results and replays for the current app session. Running games are local and end when the app closes; saved teams and account progression persist. See [navigation notes](docs/TABBED_UI.md).
+**Team Builder → Character expressions** lets you upload expression sheets and customize reactions. See the [expressions guide](docs/EXPRESSIONS.md).
 
-## September 15 rework
+## Content
 
-- Replaced the shop with the nine items from the supplied screenshot. Double Damage Idol is a jungle-spawned world pickup, never a purchasable item.
-- Narrowed the physical map by 30% and reduced base hero radii from 28 to 17. Colony still grows through 13 levels.
-- Reworked Hazmat, Irene, Oddity, Mexai and Eleanor around the current hero table. Melee attacks now have real range and windup checks; ranged attacks can miss in flight.
-- Removed Oddity's Irene-following and protection behavior, including copied protective effects.
-- Added temporary inventory theft, maximum-HP theft, red gas, Blood Rush, Intermission, and Eleanor's damage interception.
+Ten heroes: Hazmat, Irene, Oddity, Mexai, Eleanor, Yellow Colony, **Poppet**, **Crash Test**, **Kiln** and **Sunday**. Fourteen items, including **Ambush Shield**, **Invisible Cloak** and three 1-point items (Lane Rations, Scout Pin, Tempered Sole). Six items **evolve** once into a stronger named version at a visible threshold. The Double Damage Idol is a jungle pickup, never a purchasable item.
 
-See [the complete rework notes](docs/REWORK_2026-09-15.md) for every kit, item, timer, numerical tuning choice and validation detail.
+Heroes have a Stability stat: knockbacks scale with it, and heroes knocked into the lane edge take a wall slam. Full kits, numbers and evolution rules: [docs/CONTENT.md](docs/CONTENT.md). Design direction: [docs/DESIGN.md](docs/DESIGN.md).
 
-Old saves retain roster and progression; retired equipment becomes empty slots. Use **Restore starter squad** in the builder to try the new default equipment. This only changes preparation when you save the squad. The launcher stores saves under `.local-data/`.
+Old saves keep their progression. Retired heroes are swapped one-for-one for unused current heroes, and retired equipment becomes empty slots.
 
 ## Project structure
 
-Open **Team Builder → Character expressions** to upload sheets, preview faces, and customize reaction assignments, durations and low-health thresholds for each hero. Mexai and Hazmat use the supplied sheets with transparent outer backgrounds. Portrait reactions and killstreak flames follow match and replay time. See the [user and agent guide](docs/EXPRESSIONS.md).
+- `scripts/catalog.gd`: hero stats, behavior ratings, ultimates, items and evolutions, rival squads, validation and save migration.
+- `scripts/battle.gd`: seeded fixed-step simulation (movement, damage, items, objectives) and CSV event export.
+- `scripts/hero_kits.gd`: per-hero signature abilities, ultimates and AI quirks.
+- `scripts/map_layout.gd`: shared map geometry.
+- `scripts/battle_view.gd`: battlefield drawing and spectator camera.
+- `scripts/app_shell.gd`: tabs, queue, profile and results. `scripts/main.gd` is the scene entry point.
+- `scripts/loadout_panel.gd`: Team Builder page and unsaved draft.
+- `scripts/match_session.gd`: queued simulations, per-game cameras and replays.
+- `scripts/expressions.gd`, `scripts/expression_editor.gd`: portrait reactions and the sheet editor.
+- `tools/balance_probe.gd`: runs random squads and prints per-hero win rate, K/D, damage and healing.
 
-- `scripts/catalog.gd`: hero profiles, stats, item descriptions/costs and roster validation.
-- `scripts/battle.gd`: seeded fixed-step simulation and structured event export.
-- `scripts/map_layout.gd`: shared physical map geometry.
-- `scripts/battle_view.gd`: presentation and spectator camera.
-- `scripts/main.gd`: scene entry point.
-- `scripts/app_shell.gd`: persistent tabs, page navigation, queue, profile and results.
-- `scripts/loadout_panel.gd`: standalone Team Builder page and unsaved draft.
-- `scripts/match_session.gd`: independent queued simulations, per-game cameras and replays.
-
-All heroes cap at 13. Ultimates use long cooldown timers that continue through death, not charge resources. Temporary effects are reversible and recorded in replay state. `damage` CSV records now report actual HP damage after mitigation/shields, with an `absorbed` field; `heal` records actual restored HP. Item activations include `item` IDs. Historical `crown_*` event names refer to Double Damage Idol, preserving the existing export identifiers.
+All heroes cap at 13. Ultimates use long cooldown timers that continue through death, not charge resources. `damage` CSV rows report actual HP damage after mitigation and shields, with an `absorbed` field; `heal` rows report actual restored HP. Historical `crown_*` event names refer to the Double Damage Idol.
 
 ## Checks
 
-Run your Godot executable with `--headless --path . --script res://tests/NAME_test.gd` for `navigation`, `rework`, `battle`, `ui`, `map`, `duel`, `jungle` and `handoff`. `content` delegates to the rework specification. Run `display` with a real display to test fullscreen switching. Use a separate test user-data directory so UI tests do not overwrite your personal squad save.
+Run each test with a separate user-data directory so UI tests don't overwrite your squad:
 
-The previous handoff is retained as historical source material. The September 15 rework notes take precedence for current content. Online matchmaking, authored animation, advanced AI, generalized Stability and an R dashboard remain future work.
+```sh
+godot --headless --path . --script res://tests/NAME_test.gd
+```
+
+Headless tests: `roster_items`, `rework`, `battle`, `navigation`, `map`, `duel`, `jungle`, `handoff`, `session`, `expression`, `expression_editor`. `display` needs a real window. Balance snapshot: `N=45 godot --headless --path . --script res://tools/balance_probe.gd`.
+
+Online matchmaking, authored animation, spectator world objects, advanced AI, generalized Stability and an R dashboard remain future work.
