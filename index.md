@@ -20,7 +20,7 @@ title: HERO//VAULT
 
 ## Current rules of thumb
 
-- Heroes currently target a **13-level** progression.
+- Heroes progress through **13 levels**; ten heroes are playable.
 - Ultimates use **long timers/cooldowns**, not a charge meter.
 - Projectiles and attacks can miss when simulation conditions make that plausible.
 - Players primarily watch heroes perform rather than manually executing each ability.
@@ -28,6 +28,6 @@ title: HERO//VAULT
 
 ## Documentation status
 
-This site is a lightweight project notebook. Repository-specific implementation details should be verified from code before they are treated as fact.
+This site is a lightweight project notebook. The authoritative content list is [docs/CONTENT.md](docs/CONTENT.md); code is the final source of truth.
 
 For coding-agent continuity, start with the [Agent Handoff](agent-handoff.html).

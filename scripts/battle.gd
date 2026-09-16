@@ -5,6 +5,7 @@ const STEP := 0.05
 const Catalog = preload("res://scripts/catalog.gd")
 const MapLayout = preload("res://scripts/map_layout.gd")
 const Expressions = preload("res://scripts/expressions.gd")
+const Kits = preload("res://scripts/hero_kits.gd")
 const VAULT_HP := 3000.0
 var match_id := ""
 var records: Array = []
@@ -34,6 +35,7 @@ var opponent := 0
 var next_id := 0
 var kills := [0, 0]
 var overtime := false
+var mirroring := false # Guards Poppet damage mirroring from recursing.
 
 func setup(seed_value: int, team_plan: int, hero_assignment: int, rival: int, team: Array = Catalog.DEFAULT_TEAM, equipment: Array = Catalog.DEFAULT_ITEMS, orders: Array = [0, 0, 1, 1, 2]) -> void:
 	if Catalog.validate(team, equipment) != "" or orders.size() != 5:
@@ -70,7 +72,6 @@ func setup(seed_value: int, team_plan: int, hero_assignment: int, rival: int, te
 			u.ultimate = Catalog.ULTIMATES.get(id, {}).get("cooldown", 0.0)
 			u.ultimate_cooldown = u.ultimate
 			u.items = loadouts[side][slot].duplicate()
-			apply_items(u)
 		for lane in range(2):
 			towers.append({"team": side, "lane": lane, "hp": 1100.0, "max_hp": 1100.0, "pos": MapLayout.TOWERS[side][lane], "cooldown": 0.0, "flash": 0.0})
 	for i in range(MapLayout.CAMPS.size()):
@@ -85,7 +86,7 @@ func make_unit(hero_name: String, team: int, portrait: String, pos: Vector2, hp:
 		"reach": reach, "speed": 45.0, "cooldown": rng.randf_range(0, 0.6),
 		"behavior": {"retreat": 3, "pursuit": 3, "roaming": 3, "dueling": 3, "waveclear": 3, "siege": 3, "protection": 3}, "ultimate_cooldown": 0.0, "available_since": 0.0, "ability": 4.0, "ultimate": 0.0, "charge": 0.0, "charge_target": -1,
 		"shield": 0.0, "shield_time": 0.0, "respawn": 0.0, "standing": false,
-		"copied_ultimate": "", "cast_effect": "", "scout_cd": 0.0, "sole_cd": 0.0, "sole_time": 0.0, "revealed": 0.0, "power_time": 0.0, "weaken_time": 0.0, "creep": false, "intent": "Advance with the wave", "facing": MapLayout.forward(pos, lane, team).angle(),
+		"copied_ultimate": "", "cast_effect": "", "scout_cd": 0.0, "sole_cd": 0.0, "sole_time": 0.0, "creep": false, "intent": "Advance with the wave", "facing": MapLayout.forward(pos, lane, team).angle(),
 		"flash": 0.0, "xp": 0, "level": 1, "kills": 0, "deaths": 0, "saves": 0,
 		"hop": 0.0, "clutch_until": 0.0, "lane": lane, "home_lane": lane,
 		"orbit_sign": 1.0 if next_id%2 == 0 else -1.0, "dodge_cd": 0.0, "jungle_buff": 0.0, "buff_kind": "", "camp_target": -1, "roamer": false, "rotation": [], "rotation_from": lane, "rotate_cd": 20.0, "stun": 0.0,
@@ -98,7 +99,9 @@ func make_unit(hero_name: String, team: int, portrait: String, pos: Vector2, hp:
 		"healing_mark": -1, "healing_mark_until": 0.0, "encore_cd": 0.0,
 		"copy_until": 0.0, "cast_scale": 1.0, "swing": 0.0,
 		"larceny": [], "larceny_time": 0.0, "dash": {}, "damage_done": 0.0,
-		"healing_done": 0.0, "item_procs": 0, "last_attacker": -1}
+		"healing_done": 0.0, "item_procs": 0, "last_attacker": -1,
+		"retreating": false, "write_off": 0.0, "write_off_scale": 1.0, "write_off_stored": 0.0, "rest": 0.0, "rest_source": -1,
+		"last_hero_hit": -100.0, "item_progress": {}, "cloak_story": -100.0}
 	if Catalog.HEROES.has(portrait):
 		var data: Dictionary = Catalog.HEROES[portrait]
 		u.armor = data.armor
@@ -107,10 +110,6 @@ func make_unit(hero_name: String, team: int, portrait: String, pos: Vector2, hp:
 	units.append(u)
 	next_id += 1
 	return u
-
-func apply_items(u: Dictionary) -> void:
-	# Item modifiers are queried dynamically so temporary theft cannot leak stats.
-	u.hp = u.max_hp
 
 func spawn_wave() -> void:
 	for team in range(2):
@@ -157,8 +156,6 @@ func step(dt: float = STEP) -> void:
 		update_ultimate(u, dt)
 		if u.hp <= 0:
 			if not u.creep:
-				u.ambush_cd -= dt
-				u.cloak_cd -= dt
 				u.respawn -= dt
 				if u.respawn <= 0:
 					u.hp = u.max_hp
@@ -237,11 +234,9 @@ func step(dt: float = STEP) -> void:
 			var retreat_threshold: float = 0.07 + u.behavior.retreat*0.045
 			if u.team == 0:
 				retreat_threshold *= [1.0, 0.65, 1.35][plan]
-			# Fixed courage: Atlas retreats later when a living ally is close.
-			if u.portrait == "atlas" and nearby_ally(u, 180):
-				retreat_threshold *= 0.7
 			if not u.creep and u.hp / u.max_hp < retreat_threshold and u.shield <= 0 and u.pos.distance_to(u.spawn) > 80:
 				u.intent = "Retreat  -  wounded"
+				begin_retreat(u)
 				if u.lane != u.home_lane:
 					begin_rotation(u, u.home_lane)
 					u.rotate_cd = 34.0
@@ -263,6 +258,8 @@ func step(dt: float = STEP) -> void:
 			if winner != -1:
 				snapshot()
 				return
+		if not u.creep:
+			u.retreating = u.intent.begins_with("Retreat")
 		if not u.creep and u.pos.distance_to(u.spawn) < 85:
 			heal(u, u, 12.0 * dt)
 		# Small separation maintains readable tokens without physics-dependent outcomes.
@@ -312,12 +309,14 @@ func grant_shield(source: Dictionary, target: Dictionary, amount: float, duratio
 	target.shield = maxf(target.shield, amount)
 	target.shield_time = maxf(target.shield_time, duration)
 
-func evolve_items(_u: Dictionary) -> void:
-	pass # This equipment set uses explicit combat triggers, not evolutions.
+func stagger(target: Dictionary, seconds: float) -> void:
+	target.stun = maxf(target.stun, seconds/(1+target.resolve/100))
 
 func update_effects(u: Dictionary, dt: float) -> void:
-	for timer in ["dodge_cd", "jungle_buff", "stun", "invisible", "blood_rush", "overpressure", "hold_line", "encore_cd"]:
+	for timer in ["dodge_cd", "jungle_buff", "stun", "invisible", "blood_rush", "overpressure", "hold_line", "encore_cd", "curse"]:
 		u[timer] = maxf(0, u[timer]-dt)
+	Kits.tick(self, u, dt)
+	update_item_effects(u, dt)
 	u.rotate_cd -= dt
 	if u.jungle_buff > 0 and u.buff_kind == "regen":
 		heal(u, u, 3.0*dt)
@@ -345,6 +344,7 @@ func consider_rotation(u: Dictionary) -> void:
 	if enemies > 0 and (wounded or enemies >= allies):
 		begin_rotation(u, other_lane)
 		u.rotate_cd = 34.0
+		try_cloak(u, "rotation")
 		log_event("Rotation  -  " + u.name, "Through the jungle toward " + ("north" if other_lane == 0 else "south") + " lane. Available camps provide farm during travel.", "rotate", u.id)
 
 	elif camps.any(func(c): return c.hp > 0):
@@ -383,8 +383,8 @@ func siege(u: Dictionary, dt: float) -> void:
 	if u.cooldown > 0:
 		return
 	var multiplier := 0.42 if not overtime else 1.0 + (clock - 720.0)/90.0
-	var amount: float = power(u) * crown_multiplier(u) * multiplier * (1.4 if u.portrait == "atlas" and u.level >= 9 else 1.0)
-	u.invisible = 0.0
+	var amount: float = power(u) * crown_multiplier(u) * multiplier * Kits.siege_multiplier(self, u)
+	reveal(u, "attack")
 	u.cooldown = attack_interval(u)
 	u.flash = 0.12
 	if is_vault:
@@ -406,7 +406,7 @@ func update_towers(dt: float) -> void:
 		var target: Dictionary = {}
 		var best := INF
 		for u in units:
-			if u.team == tower.team or u.hp <= 0 or u.lane != tower.lane or u.invisible > 0 and u.revealed <= 0:
+			if u.team == tower.team or u.hp <= 0 or u.lane != tower.lane or u.invisible > 0:
 				continue
 			var distance: float = tower.pos.distance_to(u.pos)
 			if distance > 180:
@@ -421,12 +421,6 @@ func update_towers(dt: float) -> void:
 			tower.flash = 0.2
 			tower["target_pos"] = target.pos
 
-func nearby_ally(u: Dictionary, radius: float) -> bool:
-	for ally in units:
-		if ally.id != u.id and ally.team == u.team and not ally.creep and ally.hp > 0 and ally.pos.distance_to(u.pos) < radius:
-			return true
-	return false
-
 func select_enemy(u: Dictionary) -> Dictionary:
 	var best: Dictionary = {}
 	var best_score := INF
@@ -438,7 +432,7 @@ func select_enemy(u: Dictionary) -> Dictionary:
 	if siege_window and (clock >= 840 or u.behavior.siege == 5):
 		return {}
 	for enemy in units:
-		if enemy.team == u.team or enemy.hp <= 0 or enemy.lane != u.lane or enemy.invisible > 0 and enemy.revealed <= 0:
+		if enemy.team == u.team or enemy.hp <= 0 or enemy.lane != u.lane or enemy.invisible > 0:
 			continue
 		if not MapLayout.on_lane(enemy.pos, u.lane):
 			continue
@@ -454,18 +448,9 @@ func select_enemy(u: Dictionary) -> Dictionary:
 			score -= u.behavior.pursuit*8*(1.0-enemy.hp/enemy.max_hp)
 		if u.team == 0 and plan == 1 and not enemy.creep:
 			score -= 65
-		if u.portrait == "irene" and not enemy.creep:
-			score -= 50 * (1.0 - enemy.hp / enemy.max_hp)
 		if u.team == 0 and plan == 2 and enemy.creep:
 			score -= 45
-		if not enemy.creep and u.portrait == "mexai":
-			score -= item_value(enemy)*14.0
-		if not enemy.creep and u.portrait == "eleanor":
-			for ally in units:
-				if ally.id != u.id and ally.team == u.team and ally.hp > 0 and ally.last_attacker == enemy.id and u.pos.distance_to(ally.pos) < 220:
-					score -= 80.0
-		if not enemy.creep and u.portrait == "oddity":
-			score += sin(float(enemy.id)*2.0 + floorf(clock/4.0))*35.0
+		score += Kits.target_bias(self, u, enemy)
 		if score < best_score:
 			best_score = score
 			best = enemy
@@ -473,38 +458,9 @@ func select_enemy(u: Dictionary) -> Dictionary:
 
 func use_abilities(u: Dictionary, enemy: Dictionary) -> void:
 	if u.ability <= 0:
-		match u.portrait:
-			"hazmat":
-				if not enemy.is_empty() and u.pos.distance_to(enemy.pos) < 115:
-					start_gas(u, false)
-					u.ability = 12
-			"irene":
-				if not enemy.is_empty() and not enemy.creep and u.pos.distance_to(enemy.pos) < 170:
-					u.dash = {"kind":"leech", "target":enemy.id, "time":0.45}
-					u.ability = 10
-			"oddity":
-				if not enemy.is_empty():
-					var direction: Vector2 = enemy.pos.direction_to(u.pos) if u.hp/u.max_hp < 0.45 or u.pos.distance_to(enemy.pos) < 100 else Vector2.from_angle(rng.randf()*TAU)
-					u.pos = MapLayout.constrain(u.pos+direction*110, u.lane)
-					u.ability = 10
-					log_event("NOW YOU SEE ME", "Oddity changes the staging. No ally protection order.", "blink", u.id)
-			"mexai":
-				if not enemy.is_empty() and not enemy.creep and u.pos.distance_to(enemy.pos) < u.reach+enemy.radius:
-					steal(u, enemy, false)
-					u.ability = 10
-			"eleanor":
-				var ally := weakest_ally(u, 240)
-				if not ally.is_empty() and ally.hp/ally.max_hp < 0.65:
-					u.dash = {"kind":"intercede", "target":ally.id, "time":0.75}
-					u.ability = 12
-			"colony":
-				if not enemy.is_empty() and u.pos.distance_to(enemy.pos) < 105:
-					area_hit(u, u.pos, 80+u.radius, 38+u.level*5)
-					u.ability = 10
-			"atlas":
-				if u.hp/u.max_hp < 0.6:
-					grant_shield(u, u, 100, 4)
-					u.ability = 15
+		Kits.signature(self, u, enemy)
+	if not enemy.is_empty() and not enemy.creep:
+		try_cloak(u, "approach", enemy)
 	if not u.dash.is_empty() or enemy.is_empty() or enemy.creep or u.pos.distance_to(enemy.pos) > 240:
 		return
 	if u.portrait == "oddity" and u.encore_cd <= 0 and u.copied_ultimate != "" and u.copy_until > clock:
@@ -518,11 +474,7 @@ func use_abilities(u: Dictionary, enemy: Dictionary) -> void:
 		return
 	if u.ultimate > 0:
 		return
-	if u.portrait == "hazmat" and u.pos.distance_to(enemy.pos) > 140:
-		return
-	if u.portrait == "irene" and u.attacks < 3:
-		return
-	if u.portrait == "eleanor" and weakest_ally(u, 160).is_empty():
+	if Kits.ultimate_held(self, u, enemy):
 		return
 	if assignment == 2 and u.team == 0 and enemy.hp/enemy.max_hp > 0.65:
 		return
@@ -539,25 +491,7 @@ func resolve_ultimate(u: Dictionary, _enemy: Dictionary) -> void:
 		return
 	var data: Dictionary = Catalog.ULTIMATES[effect]
 	var damage: float = (data.damage+data.per_level*u.level)*u.cast_scale
-	match effect:
-		"hazmat":
-			u.overpressure = 8.0*u.cast_scale
-			start_gas(u, true)
-		"irene":
-			u.blood_rush = 9.0*u.cast_scale
-		"eleanor":
-			u.hold_line = 8.0*u.cast_scale
-		"oddity":
-			start_intermission(u)
-		"mexai":
-			u.larceny.clear()
-			for target in units:
-				if target.team != u.team and not target.creep and target.hp > 0 and target.pos.distance_to(u.pos) < 210:
-					u.larceny.append(target.id)
-			u.larceny_time = 2.5*u.cast_scale
-		"colony", "atlas":
-			area_hit(u, u.pos, 140+u.radius, damage)
-			grant_shield(u, u, 100*u.cast_scale, 4)
+	Kits.resolve(self, u, effect, damage)
 	log_event(data.id, u.name + " releases " + data.id + ".", "ultimate_release", u.id)
 
 func area_hit(u: Dictionary, position: Vector2, radius: float, damage: float) -> void:
@@ -570,7 +504,7 @@ func heal(source: Dictionary, target: Dictionary, amount: float, redirect: bool 
 	if target.hp <= 0 or intermission.time > 0:
 		return
 	for field in fields:
-		if field.team != target.team and field.time > 0 and target.pos.distance_to(field.pos) < field.radius:
+		if field.kind == "gas" and field.team != target.team and field.time > 0 and target.pos.distance_to(field.pos) < field.radius:
 			amount *= 0.8
 			break
 	if redirect and target.healing_mark_until > clock:
@@ -589,19 +523,7 @@ func heal(source: Dictionary, target: Dictionary, amount: float, redirect: bool 
 		log_event("BACK FROM THE BRINK", target.name + " steals another chance to survive.", "clutch", target.id)
 
 func steal(u: Dictionary, enemy: Dictionary, grand: bool) -> void:
-	if enemy.hp <= 0 or u.hp <= 0 or u.pos.distance_to(enemy.pos) > u.reach+enemy.radius+15:
-		return
-	var available: Array = []
-	for slot in range(enemy.items.size()):
-		if enemy.items[slot] != "none" and not slot_stolen(enemy.id, slot):
-			available.append(slot)
-	if available.is_empty():
-		return
-	var slot: int = available[rng.randi_range(0, available.size()-1)]
-	var item: String = enemy.items[slot]
-	thefts.append({"owner":enemy.id, "thief":u.id, "slot":slot, "item":item, "until":clock+8.0})
-	log_event("GRAND LARCENY" if grand else "PILFER", u.name+" takes "+Catalog.ITEMS[item].name+" from "+enemy.name+" for 8s.", "theft", u.id)
-	record_event("item_stolen", u.id, enemy.id, 8, {"item":item})
+	Kits.steal(self, u, enemy, grand)
 
 func update_fields(dt: float) -> void:
 	for field in fields:
@@ -609,7 +531,8 @@ func update_fields(dt: float) -> void:
 		if owner.is_empty() or owner.hp <= 0:
 			field.time = 0.0
 			continue
-		field.pos = owner.pos
+		if not field.anchored:
+			field.pos = owner.pos
 		field.time -= dt
 		field.tick -= dt
 		if field.tick <= 0 and field.time > 0:
@@ -622,16 +545,10 @@ func update_fields(dt: float) -> void:
 						heal(owner, owner, maxf(0,before-target.hp)*0.3)
 	fields = fields.filter(func(field): return field.time > 0)
 
-func retreat_speed(u: Dictionary) -> float:
-	return movement_speed(u, u.spawn)/u.speed*1.15
-
-func banner_multiplier(_u: Dictionary) -> float:
-	return 1.0
-
 func fire(u: Dictionary, enemy: Dictionary, damage: float, ultimate: bool) -> void:
 	if intermission.time > 0 or u.hp <= 0:
 		return
-	u.invisible = 0.0
+	reveal(u, "attack")
 	u.attacks += 1
 	var base: float = damage if ultimate else power(u)
 	if u.jungle_buff > 0 and u.buff_kind == "power":
@@ -644,10 +561,13 @@ func fire(u: Dictionary, enemy: Dictionary, damage: float, ultimate: bool) -> vo
 		record_event("melee_windup", u.id, enemy.id, base)
 		return
 	record_event("projectile_fired", u.id, enemy.id, base, {"ability": u.cast_effect if ultimate else "attack"})
-	var direction: Vector2 = u.pos.direction_to(enemy.pos)
+	launch(u, u.pos.direction_to(enemy.pos), base, 520.0 if ultimate else data.get("projectile", 390.0), ultimate)
+
+## Projectiles fly straight and can miss; ultimate shots have a slightly wider hitbox.
+func launch(u: Dictionary, direction: Vector2, damage: float, speed: float, ultimate: bool = true) -> void:
 	shots.append({"pos":u.pos+direction*(u.radius+2), "direction":direction,
-		"team":u.team,"source":u.id,"damage":base,"ultimate":ultimate,
-		"life":1.2,"speed":520.0 if ultimate else data.get("projectile",390.0)})
+		"team":u.team,"source":u.id,"damage":damage,"ultimate":ultimate,
+		"life":1.2,"speed":speed})
 	u.flash = 0.15
 
 func update_shots(dt: float) -> void:
@@ -680,17 +600,21 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 		return
 	var attacker := get_unit(source_id)
 	if not transferred and not attacker.is_empty() and attacker.team != target.team:
-		if has_item(attacker, "execution") and not target.creep and target.hp/target.max_hp < 0.2:
+		if has_item(attacker, "execution") and not target.creep and target.hp/target.max_hp < (0.3 if is_evolved(attacker, "execution") else 0.2):
 			amount *= 1.6
 			item_event(attacker, "execution", target.id, amount)
 		if kind in ["basic", "melee_basic"]:
 			if has_item(attacker, "first_hit") and not target.creep:
 				var last: float = attacker.encounters.get(target.id, -100.0)
 				if not attacker.hammer_hits.has(target.id) or clock-last >= 8.0:
-					amount += 60*crown_multiplier(attacker)
+					var sledge := is_evolved(attacker, "first_hit")
+					amount += (100 if sledge else 60)*crown_multiplier(attacker)
 					attacker.hammer_hits[target.id] = clock
-					item_event(attacker, "first_hit", target.id, 60)
-			if lucky or (kind == "basic" and has_item(attacker,"coin") and rng.randf() < 0.08):
+					item_event(attacker, "first_hit", target.id, 100 if sledge else 60)
+					if sledge:
+						stagger(target, 0.4)
+					advance_item(attacker, "first_hit", 1)
+			if lucky or (kind == "basic" and has_item(attacker,"coin") and rng.randf() < coin_chance(attacker)):
 				amount *= 3.0
 				item_event(attacker, "coin", target.id, amount)
 		if not target.creep and not attacker.creep:
@@ -721,12 +645,17 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 	if has_item(target,"bodyguard"):
 		for ally in units:
 			if ally.id != target.id and not ally.creep and ally.hp > 0 and ally.team == target.team and ally.hp < target.hp and ally.pos.distance_to(target.pos) < 120:
-				amount *= 0.75
+				var reduction: float = 0.35 if is_evolved(target, "bodyguard") else 0.25
+				advance_item(target, "bodyguard", amount*reduction)
+				amount *= 1.0-reduction
 				break
 	check_last_stand(target)
 	target.last_hit = clock
 	target.last_attacker = source_id
-	target.invisible = 0.0
+	if not attacker.is_empty() and not attacker.creep:
+		target.last_hero_hit = clock
+	if target.invisible > 0:
+		reveal(target, "damaged")
 	var absorbed := minf(target.shield, amount)
 	target.shield -= absorbed
 	amount -= absorbed
@@ -734,6 +663,9 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 	target.hp = maxf(0, target.hp-amount)
 	var actual: float = hp_before-target.hp
 	record_event("damage", source_id, target.id, actual, {"damage_type":kind,"absorbed":absorbed})
+	if not target.creep:
+		Kits.on_damaged(self, target, actual, absorbed, source_id)
+		check_ambush(target, actual)
 	if not attacker.is_empty() and attacker.team != target.team:
 		attacker.damage_done += actual
 		if kind == "basic" and attacker.portrait == "irene":
@@ -756,6 +688,7 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 	target.overpressure = 0.0
 	target.dash.clear()
 	target.larceny.clear()
+	Kits.on_death(self, target)
 	if not target.creep and not source.is_empty() and not source.creep and source.team != target.team:
 		if has_item(target, "revenge") and source.id not in target.revenge_targets:
 			target.revenge_targets.append(source.id)
@@ -763,6 +696,10 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 		if has_item(source, "kill_crown"):
 			source.kill_streak += 1
 			item_event(source, "kill_crown", target.id, source.kill_streak)
+		advance_item(source, "execution", 1)
+		if source.cloak_story > clock:
+			record_event("cloak_gank_success", source.id, target.id, 1, {"item": "cloak"})
+			source.cloak_story = -100.0
 		source.revenge_targets.erase(target.id)
 	update_loans()
 	target.charge = 0.0
@@ -785,13 +722,11 @@ func grant_xp(ally: Dictionary, amount: int) -> void:
 	ally.xp += amount
 	while ally.xp >= ally.level*Catalog.XP_PER_LEVEL and ally.level < Catalog.MAX_LEVEL:
 		ally.level += 1
-		if ally.portrait == "atlas" and ally.level in [5, 9, 13]:
-			ally.damage += 12
-			log_event("ATLAS RISES", "The tank becomes a threat at level %d." % ally.level, "evolve", ally.id)
 		ally.max_hp += Catalog.GROWTH[ally.portrait][0]
 		ally.hp += Catalog.GROWTH[ally.portrait][0]
 		ally.damage += Catalog.GROWTH[ally.portrait][1]
-		evolve_items(ally)
+		for item in ally.items:
+			advance_item(ally, item, 0)
 		if ally.portrait == "colony":
 			ally.radius = MapLayout.HERO_RADIUS + floorf((ally.level-1)/2.0)*3.5
 		log_event(ally.name + "  -  level %d" % ally.level, "More health and stronger basic attacks.", "level", ally.id)
@@ -825,7 +760,7 @@ func farm_camp(u: Dictionary, dt: float) -> bool:
 		camp.last_hit = clock
 		u.cooldown = attack_interval(u)
 		u.flash = 0.2
-		u.invisible = 0.0
+		reveal(u, "attack")
 		if camp.hp <= 0:
 			camp.respawn = 75.0
 			grant_xp(u, 6)
@@ -853,7 +788,7 @@ func frame() -> Dictionary:
 	return {"time": clock, "units": units, "shots": shots, "vaults": vaults, "winner": winner, "kills": kills, "towers": towers, "camps": camps, "crown": crown, "fields": fields, "thefts":thefts, "intermission":intermission}
 
 func duel_move(u: Dictionary, enemy: Dictionary, dt: float) -> void:
-	if u.portrait in ["hazmat", "eleanor"]:
+	if Kits.holds_ground(self, u):
 		return # Heavy melee commits to its swing; carries provide evasive footwork.
 	# Seed-independent, fixed-step footwork: ranged heroes strafe, brawlers circle.
 	var away: Vector2 = enemy.pos.direction_to(u.pos)
@@ -890,7 +825,7 @@ func duel_move(u: Dictionary, enemy: Dictionary, dt: float) -> void:
 			break
 
 func update_ultimate(u: Dictionary, dt: float) -> void:
-	for timer in ["scout_cd", "sole_cd", "sole_time", "revealed", "power_time", "weaken_time"]:
+	for timer in ["scout_cd", "sole_cd", "sole_time", "ambush_cd", "cloak_cd"]:
 		u[timer] = maxf(0, u[timer]-dt)
 	if u.ultimate_cooldown <= 0 or u.ultimate <= 0:
 		return
@@ -1005,7 +940,9 @@ func attack_interval(u: Dictionary) -> float:
 	return u.attack_interval/(1.65 if u.blood_rush > 0 else 1.0)
 
 func movement_speed(u: Dictionary, destination: Vector2) -> float:
-	var value: float = u.speed*(1.35 if u.blood_rush > 0 else 1.0)*(0.2 if u.hold_line > 0 else 1.0)
+	var value: float = u.speed*(1.35 if u.blood_rush > 0 else 1.0)*(0.2 if u.hold_line > 0 else 1.0)*(1.2 if u.rest > 0 else 1.0)
+	if u.sole_time > 0:
+		value *= 1.55 if is_evolved(u, "sole") else 1.4
 	if has_item(u,"coward") and u.hp/u.max_hp < 0.3:
 		var nearest: Dictionary = {}
 		var distance := 240.0
@@ -1020,37 +957,102 @@ func movement_speed(u: Dictionary, destination: Vector2) -> float:
 func item_event(u: Dictionary, item: String, target: int, amount: float) -> void:
 	u.item_procs += 1
 	record_event("item_proc",u.id,target,amount,{"item":item})
-	if item in ["coin","kill_crown","last_stand"]:
-		log_event(Catalog.ITEMS[item].name.to_upper(),u.name+" triggers "+Catalog.ITEMS[item].name+".","item",u.id)
+	if item in ["coin","kill_crown","last_stand","ambush"]:
+		var label := Catalog.item_name(item, is_evolved(u, item))
+		log_event(label.to_upper(),u.name+" triggers "+label+".","item",u.id)
+
+# --- Item evolution and triggered items --------------------------------------
+
+func is_evolved(u: Dictionary, item: String) -> bool:
+	return item in u.evolved and has_item(u, item)
+
+## Adds progress toward an owned item's one-time evolution. Stolen copies never evolve.
+func advance_item(u: Dictionary, item: String, amount: float) -> void:
+	if u.creep or item not in u.items or item in u.evolved or not has_item(u, item):
+		return
+	var evolve: Dictionary = Catalog.ITEMS.get(item, {}).get("evolve", {})
+	if evolve.is_empty():
+		return
+	var progress: float = u.level
+	if evolve.trigger != "level":
+		u.item_progress[item] = u.item_progress.get(item, 0.0)+amount
+		progress = u.item_progress[item]
+	if progress < evolve.at:
+		return
+	u.evolved.append(item)
+	record_event("item_evolved", u.id, -1, progress, {"item": item, "detail": evolve.name})
+	log_event("ITEM EVOLVED", "%s's %s becomes %s: %s" % [u.name, Catalog.ITEMS[item].name, evolve.name, evolve.summary], "evolve", u.id)
+
+func coin_chance(u: Dictionary) -> float:
+	return 0.14 if is_evolved(u, "coin") else 0.08
+
+func update_item_effects(u: Dictionary, dt: float) -> void:
+	if u.creep:
+		return
+	if has_item(u, "rations") and u.hp < u.max_hp:
+		var hearty := is_evolved(u, "rations")
+		if clock-u.last_hero_hit >= (4.0 if hearty else 6.0):
+			heal(u, u, (4.0+0.4*u.level)*(2.0 if hearty else 1.0)*dt)
+	if has_item(u, "scout") and u.scout_cd <= 0:
+		var found := false
+		for enemy in units:
+			if enemy.team != u.team and enemy.invisible > 0 and enemy.hp > 0 and enemy.pos.distance_to(u.pos) < 260:
+				reveal(enemy, "scout")
+				found = true
+		if found:
+			u.scout_cd = 10.0
+			item_event(u, "scout", -1, 1)
+	if u.invisible > 0:
+		for enemy in units:
+			if enemy.team != u.team and not enemy.creep and enemy.hp > 0 and enemy.pos.distance_to(u.pos) < 60:
+				reveal(u, "proximity")
+				break
+
+func try_cloak(u: Dictionary, reason: String, enemy: Dictionary = {}) -> void:
+	if u.creep or u.cloak_cd > 0 or u.invisible > 0 or not has_item(u, "cloak"):
+		return
+	if reason == "approach" and (u.pos.distance_to(enemy.pos) < 150 or clock-u.last_hit < 4.0):
+		return
+	u.invisible = 6.0
+	u.cloak_cd = 30.0
+	u.cloak_story = clock+12.0
+	item_event(u, "cloak", enemy.get("id", -1), 6)
+	log_event("CLOAKED", u.name + " vanishes from enemy sight (" + reason + ").", "cloak", u.id)
+
+func reveal(u: Dictionary, reason: String) -> void:
+	if u.invisible <= 0:
+		return
+	u.invisible = 0.0
+	record_event("cloak_reveal", u.id, -1, 0, {"item": "cloak", "detail": reason})
+
+func check_ambush(u: Dictionary, amount: float) -> void:
+	if u.hp <= 0 or not has_item(u, "ambush"):
+		return
+	u.burst_hits.append([clock, amount])
+	u.burst_hits = u.burst_hits.filter(func(hit): return clock-hit[0] <= 2.0)
+	var total := 0.0
+	for hit in u.burst_hits:
+		total += hit[1]
+	if total >= u.max_hp*0.3 and u.ambush_cd <= 0:
+		u.ambush_cd = 20.0
+		u.burst_hits.clear()
+		grant_shield(u, u, u.max_hp*0.3, 3)
+		item_event(u, "ambush", u.last_attacker, u.max_hp*0.3)
+
+func begin_retreat(u: Dictionary) -> void:
+	if u.retreating or u.sole_cd > 0 or not has_item(u, "sole"):
+		return
+	var greaves := is_evolved(u, "sole")
+	u.sole_time = 4.0 if greaves else 2.5
+	u.sole_cd = 12.0
+	item_event(u, "sole", -1, u.sole_time)
+	advance_item(u, "sole", 1)
 
 func check_last_stand(u: Dictionary) -> void:
 	if u.hp > 0 and u.hp/u.max_hp < 0.25 and not u.last_stand_used and has_item(u,"last_stand"):
 		u.last_stand_used = true
 		grant_shield(u,u,u.max_hp*0.35,5)
 		item_event(u,"last_stand",u.id,u.max_hp*0.35)
-
-func start_gas(u: Dictionary, overload: bool) -> void:
-	# Opening the rig again replaces its prior cloud instead of stacking it.
-	fields = fields.filter(func(field): return field.source != u.id)
-	fields.append({"pos":u.pos,"source":u.id,"team":u.team,"time":8.0 if overload else 5.0,
-		"tick":0.0,"radius":155.0 if overload else 90.0,"overload":overload,
-		"damage":(17.0+u.level*2.5)*u.cast_scale if overload else 9.0+u.level*1.2})
-	log_event("OVERPRESSURE" if overload else "RED GAS",u.name+" vents a moving cloud of red gas.","gas",u.id)
-
-func start_intermission(u: Dictionary) -> void:
-	intermission = {"time":3.0*u.cast_scale,"caster":u.id}
-	# No ally rescue selection, no Irene affinity. Enemy staging is seeded.
-	var moved := 0
-	for target in units:
-		if target.id == u.id or target.team == u.team or target.creep or target.hp <= 0 or target.pos.distance_to(u.pos) > 220:
-			continue
-		var destination: Vector2 = MapLayout.constrain(target.pos+Vector2.from_angle(rng.randf()*TAU)*rng.randf_range(45,95),target.lane)
-		target.pos = destination
-		record_event("intermission_move",u.id,target.id)
-		moved += 1
-		if moved >= 4:
-			break
-	log_event("INTERMISSION","Combat freezes. Oddity restages nearby opponents; frozen units cannot take damage.","intermission_start",u.id)
 
 func update_loans() -> void:
 	for loan in thefts:
@@ -1074,52 +1076,10 @@ func update_loans() -> void:
 	health_loans = health_loans.filter(func(loan): return loan.until > clock)
 
 func update_dash(u: Dictionary, dt: float) -> void:
-	var action: Dictionary = u.dash
-	var target := get_unit(action.target)
-	if target.is_empty() or target.hp <= 0 or u.stun > 0:
-		u.dash.clear()
-		return
-	u.dash.time -= dt
-	u.pos = MapLayout.move_on_lane(u.pos,target.pos,u.lane,350*dt)
-	u.intent = "Leeching Cut" if action.kind == "leech" else "Intercede"
-	if u.pos.distance_to(target.pos) < u.radius+target.radius+15:
-		if action.kind == "leech":
-			apply_damage(target,(45+u.level*3)*crown_multiplier(u),u.id,false,"ability")
-			if target.hp > 0:
-				var amount: float = target.max_hp*0.12
-				target.max_hp -= amount
-				target.hp = minf(target.hp,target.max_hp)
-				u.max_hp += amount
-				heal(u,u,amount)
-				health_loans.append({"owner":target.id,"thief":u.id,"amount":amount,"until":clock+7.0})
-				record_event("health_stolen",u.id,target.id,amount)
-		else:
-			grant_shield(u,target,110+u.level*4,4)
-			u.saves += 1
-			for enemy in units:
-				if enemy.team != u.team and enemy.hp > 0 and enemy.pos.distance_to(u.pos) < 95:
-					enemy.pos = MapLayout.constrain(enemy.pos+u.pos.direction_to(enemy.pos)*65,enemy.lane)
-			log_event("INTERCEDE",u.name+" shields "+target.name+" and drives enemies back.","shield",u.id)
-		u.dash.clear()
-	elif u.dash.time <= 0:
-		record_event("dash_miss",u.id,target.id)
-		u.dash.clear()
+	Kits.update_dash(self, u, dt)
 
 func update_larceny(u: Dictionary, dt: float) -> void:
-	u.larceny_time -= dt
-	if u.larceny_time <= 0 or u.stun > 0:
-		u.larceny.clear()
-		return
-	var target := get_unit(u.larceny[0])
-	if target.is_empty() or target.hp <= 0 or target.pos.distance_to(u.pos) > 240 or target.lane != u.lane:
-		u.larceny.pop_front()
-		return
-	u.pos = MapLayout.move_on_lane(u.pos,target.pos,u.lane,380*dt)
-	u.intent = "Grand Larceny / next pocket"
-	if target.pos.distance_to(u.pos) < u.reach+target.radius+10:
-		steal(u,target,true)
-		apply_damage(target,(45+u.level*4)*u.cast_scale*crown_multiplier(u),u.id,false,"ability")
-		u.larceny.pop_front()
+	Kits.update_larceny(self, u, dt)
 
 func update_melee(dt: float) -> void:
 	for swing in melee_swings:
@@ -1130,18 +1090,18 @@ func update_melee(dt: float) -> void:
 		if u.is_empty() or u.hp <= 0 or u.stun > 0:
 			continue
 		var hit := false
-		var lucky: bool = has_item(u,"coin") and rng.randf() < 0.08
+		var lucky: bool = has_item(u,"coin") and rng.randf() < coin_chance(u)
 		for target in units:
 			if target.team == u.team or target.hp <= 0 or target.pos.distance_to(u.pos) > u.reach+target.radius:
 				continue
-			if u.portrait != "eleanor" and target.id != swing.target:
+			var cleave: bool = Kits.melee_cleaves(self, u)
+			if not cleave and target.id != swing.target:
 				continue
-			if u.portrait == "eleanor" and absf(angle_difference(swing.angle,u.pos.angle_to_point(target.pos))) > PI*0.45:
+			if cleave and absf(angle_difference(swing.angle,u.pos.angle_to_point(target.pos))) > PI*0.45:
 				continue
 			# Roll once per swing, even for Eleanor's cleave.
 			apply_damage(target,swing.damage,u.id,false,"melee_basic",false,lucky)
-			if u.portrait == "hazmat" and target.hp > 0:
-				target.stun = maxf(target.stun,0.35/(1+target.resolve/100))
+			Kits.on_melee_hit(self, u, target)
 			record_event("melee_hit",u.id,target.id,swing.damage)
 			hit = true
 		if not hit:

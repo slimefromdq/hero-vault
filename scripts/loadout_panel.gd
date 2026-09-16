@@ -81,10 +81,10 @@ func _ready() -> void:
 			for id in Catalog.ITEM_IDS:
 				var data: Dictionary = Catalog.ITEMS[id]
 				items.add_item("%s  [%d]" % [data.name, data.cost])
-				items.get_popup().set_item_tooltip(items.item_count-1, data.description)
+				items.get_popup().set_item_tooltip(items.item_count-1, Catalog.item_tooltip(id))
 			items.item_selected.connect(func(index):
 				gear[slot][which] = Catalog.ITEM_IDS[index]
-				detail_label.text = Catalog.ITEMS[Catalog.ITEM_IDS[index]].description
+				detail_label.text = Catalog.item_tooltip(Catalog.ITEM_IDS[index])
 				update_view())
 			row_items.append(items)
 		item_choices.append(row_items)
@@ -162,7 +162,7 @@ func update_view() -> void:
 		for slot in range(2):
 			item_choices[row][slot].select(Catalog.ITEM_IDS.find(gear[row][slot]))
 	var error := Catalog.validate(team, gear)
-	budget_label.text = "%d / 18 ITEM POINTS   ·   %s" % [Catalog.budget(gear), ("Unsaved changes" if is_dirty() else "Saved / ready to queue") if error.is_empty() else error]
+	budget_label.text = "%d / %d ITEM POINTS   ·   %s" % [Catalog.budget(gear), Catalog.ITEM_BUDGET, ("Unsaved changes" if is_dirty() else "Saved / ready to queue") if error.is_empty() else error]
 	budget_label.add_theme_color_override("font_color", Color("8cddc6") if error.is_empty() else Color("f49bae"))
 	apply_button.disabled = not error.is_empty() or draft_name.text.strip_edges().is_empty()
 	host.queue_redraw()

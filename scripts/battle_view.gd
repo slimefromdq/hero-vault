@@ -67,8 +67,10 @@ func _draw() -> void:
 	draw_set_transform(VIEW_CENTER - camera_center * camera_zoom, 0, Vector2.ONE * camera_zoom)
 	draw_terrain()
 	for field in frame.get("fields", []):
-		draw_circle(arena_point(field.pos), field.radius*0.82, Color(0.9, 0.15, 0.18, 0.2))
-		draw_arc(arena_point(field.pos), field.radius*0.82, 0, TAU, 48, Color("e15b62"), 2, true)
+		# Red = Hazmat gas (also cuts healing); orange = Kiln fire.
+		var tint := Color("f08a3c") if field.get("kind", "gas") == "fire" else Color("e15b62")
+		draw_circle(arena_point(field.pos), field.radius*0.82, Color(tint, 0.2))
+		draw_arc(arena_point(field.pos), field.radius*0.82, 0, TAU, 48, tint, 2, true)
 	draw_camps(frame)
 	draw_crown(frame)
 	for tower in frame.towers:
@@ -202,7 +204,7 @@ func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 	host.Expressions.draw_fire(self, Rect2(center-Vector2.ONE*token_radius, Vector2.ONE*token_radius*2), u, time)
 	if u.curse > 0 or u.stun > 0:
 		draw_arc(center, token_radius+7, -PI/2, TAU, 6, Color("d5a0ef"), 3, true)
-		label_at("DISABLED" if u.stun > 0 else "CURSED", center+Vector2(-23, -token_radius-15), 9, Color("d5a0ef"))
+		label_at("DISABLED" if u.stun > 0 else "STITCHED", center+Vector2(-23, -token_radius-15), 9, Color("d5a0ef"))
 	if not u.evolved.is_empty():
 		draw_circle(center+Vector2(token_radius-4, -token_radius+4), 5, GOLD)
 	# Low-health ring stays outside the supplied portrait artwork.
@@ -221,12 +223,25 @@ func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 		draw_colored_polygon(PackedVector2Array([weapon-side*3,weapon+aim*14,weapon+side*3]),Color("d1edee"))
 	elif u.portrait == "oddity":
 		draw_arc(weapon+aim*4, 5, 0, TAU, 5, Color("dcb9fa"),2,true)
+	elif u.portrait == "poppet":
+		draw_line(weapon, weapon+aim*16, Color("e8e2d0"), 2, true)
+	elif u.portrait == "crash_test":
+		draw_rect(Rect2(weapon+aim*2-Vector2(5, 5), Vector2(10, 10)), Color("f2c230"))
+	elif u.portrait == "kiln":
+		draw_circle(weapon+aim*4, 5, Color("f08a3c"))
+	elif u.portrait == "sunday":
+		draw_arc(weapon+aim*4, 4, 0, TAU, 12, Color("ffe08a"), 2, true)
 	else:
 		draw_circle(weapon+aim*3, 5, GOLD)
 	if u.flash > 0:
 		draw_arc(center,radius+8,u.facing-0.6,u.facing+0.6,12,GOLD,3,true)
 	if u.get("blood_rush",0) > 0:
 		draw_arc(center,radius+4,0,TAU,32,RED,2,true)
+	if u.get("write_off",0) > 0:
+		draw_arc(center,radius+10+sin(time*20)*2,0,TAU,24,Color("f2c230"),3,true)
+		label_at("WRITE-OFF %d" % int(ceil(u.write_off)),center+Vector2(-30,radius+34),8,Color("f2c230"))
+	if u.get("rest",0) > 0:
+		draw_arc(center,radius+5,0,TAU,32,Color("ffe08a"),2,true)
 	if u.get("hold_line",0) > 0:
 		draw_arc(center,140*0.82,0,TAU,48,Color(GREEN,0.4),2,true)
 	if u.get("kill_streak",0) > 0:

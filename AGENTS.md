@@ -54,16 +54,18 @@ The following rules are current design intent and should be treated as high-prio
 - Spectator readability beats invisible mathematical cleverness.
 - Avoid mechanics that only become understandable after reading a paragraph of exceptions.
 
-### Known hero/category examples
+### Roster
 
-These names are design references, not a guarantee that each is currently implemented:
+Implemented (see `docs/CONTENT.md` and `scripts/catalog.gd`):
 
 - **Objects given life:** Poppet, Crash Test, Kiln
 - **Fantasy:** Eleanor, Mexai
 - **Circus:** Oddity, Irene
-- **Other concepts discussed:** Hazmat, Sunday, a shark pirate, an anime mascot/toy character capable of cloning herself with a hive-mind flavor
+- **Other:** Hazmat, Yellow Colony, Sunday
 
-**VERIFY IN REPO:** exact implemented roster, current names, stats, abilities, categories, assets, and status.
+Poppet, Crash Test, Kiln and Sunday are first-pass kits built from their names and categories; the user may replace them.
+
+Concept only: a shark pirate; an anime mascot/toy character who clones herself (hive-mind flavor); a superhero tank-carry (Atlas, **parked** on 2026-09-15; do not re-add without being asked).
 
 ---
 
@@ -93,26 +95,28 @@ Fill these in only after inspecting the actual repository.
 | Primary language(s) | GDScript |
 | Default branch | `main` |
 | Main game entry point | `project.godot` -> `scenes/main.tscn` |
-| Hero data location | `scripts/catalog.gd` |
-| Item data location | `scripts/catalog.gd` |
+| Hero data location | `scripts/catalog.gd` (data); `scripts/hero_kits.gd` (per-hero abilities, ultimates, AI quirks) |
+| Item data location | `scripts/catalog.gd` (costs, text, `evolve` blocks); item rules in `scripts/battle.gd` |
 | Simulation/combat core | `scripts/battle.gd` |
 | UI/spectator layer | `scripts/app_shell.gd`, `scripts/battle_view.gd` |
 | Automated tests | `tests/*_test.gd` |
 | Formatting/lint tooling | No configured formatter/linter; use git diff --check |
 | Asset pipeline | Godot imports bundled SVG/PNG; custom expression sheets load at runtime (docs/EXPRESSIONS.md) |
-| Save/data compatibility constraints | **VERIFY IN REPO** |
+| Save/data compatibility constraints | `user://squad.json`: retired heroes are swapped one-for-one (`Catalog.migrate_team`), retired items become `none`. CSV event IDs are stable (`crown_*` = Double Damage Idol). |
 
 ### Build / run / test commands
 
 Replace placeholders after repo inspection.
 
 ```powershell
-# Import project.godot into Godot 4.7.2, or launch with an explicit executable:
-./play.ps1 -GodotPath 'C:\path\to\godot.exe'
-# Run each test with an isolated APPDATA/LOCALAPPDATA directory:
-godot --headless --path . --script res://tests/navigation_test.gd
-# Other headless checks: rework, battle, ui, map, duel, jungle, handoff, session.
-# display_test.gd needs a real display. No formatter/linter is configured.
+# Launch (uses -GodotPath, $env:GODOT, or godot on PATH):
+./play.ps1
+# Run each test with an isolated user-data directory (APPDATA/LOCALAPPDATA on Windows, HOME on Linux):
+godot --headless --path . --script res://tests/roster_items_test.gd
+# Other headless checks: rework, battle, navigation, map, duel, jungle, handoff, session, expression, expression_editor.
+# display_test.gd needs a real display (xvfb-run works on Linux). No formatter/linter is configured.
+# Balance snapshot over random squads:
+N=45 godot --headless --path . --script res://tools/balance_probe.gd
 ```
 
 An agent must not claim validation succeeded if these commands have not actually been run.
@@ -127,12 +131,13 @@ Keep this section synchronized with the repository. Prefer a short map of archit
 /
 |-- project.godot, play.ps1    # game entry and launcher
 |-- scenes/                  # main scene
-|-- scripts/                 # catalog, simulation, navigation and presentation
-|-- assets/                  # SVG hero art and Godot import settings
+|-- scripts/                 # catalog, simulation, hero kits, navigation and presentation
+|-- assets/                  # SVG hero portraits, expression sheets, Godot import settings
 |-- tests/                   # GDScript checks
-|-- docs/                    # implementation and historical design notes
+|-- tools/                   # balance probe
+|-- docs/                    # CONTENT.md (current content), design and historical notes
 |-- index.md, heroes.md, items.md, systems.md, roadmap.md
-|-- _config.yml              # existing root-level documentation site
+|-- _config.yml              # GitHub Pages (Jekyll) site served from the root
 |-- AGENTS.md, README.md     # agent guide and play instructions
 ```
 
@@ -256,12 +261,11 @@ Randomness should not erase hero identity. A sniper can miss, but should still b
 
 Current design target: **13 levels**.
 
-**VERIFY IN REPO**:
-- XP curve;
-- stat growth method;
-- ability unlock/upgrade points;
-- whether level 13 is a hard cap everywhere;
-- whether items or modes can modify progression.
+In the code (`battle.grant_xp`, `Catalog.GROWTH`):
+- XP needed for the next level = `level × 6`; creep 1, hero takedown 3, jungle camp 6.
+- Each level adds that hero's flat HP and basic damage.
+- Ability numbers scale with level inside `hero_kits.gd`; there are no unlock points. Yellow Colony grows every two levels.
+- Level 13 is a hard cap (`Catalog.MAX_LEVEL`). Items do not change progression; Lucky Coin and Lane Rations evolve at levels 13 and 9.
 
 When changing progression, update simulations/tests that assume the cap.
 
@@ -415,36 +419,37 @@ Never leave the next agent with “continue where I left off” and no coordinat
 ## 13. Session Handoff
 
 ### Current objective
-Character expression uploads, transparent portrait backgrounds, editable reaction rules, and GitHub publication with an agent guide.
+Add Poppet, Crash Test, Kiln and Sunday; remove the tank carry; add Ambush Shield, Invisible Cloak, Lane Rations, Scout Pin and Tempered Sole; add one-time item evolution; clean up docs, launcher, assets and tests.
 
 ### What changed
-- Added Team Builder → Character expressions: per-hero imports, grid/caption controls, previews, mappings, durations, low-health threshold, save/cancel and default restoration.
-- Removed edge-connected pale backgrounds from Mexai and Hazmat while preserving enclosed white eyes; cached transparent textures preserve proportions.
-- Included the earlier combat expressions and three-kill fire burst across battlefield, lineup and focus portraits.
-- Added the user and implementation guide in [docs/EXPRESSIONS.md](docs/EXPRESSIONS.md), including persistence schema, extension points and testing instructions.
-- GitHub destination: origin/main (slimefromdq/hero-vault). Personal uploads, test fixtures and captures remain under ignored user data.
+- Four new heroes with first-pass kits (see `docs/CONTENT.md`). Atlas removed from data, rivals, code and assets.
+- Hero-specific logic moved out of `battle.gd` into static functions in `scripts/hero_kits.gd` (signature, ultimate hold rules, resolve, target bias, ticks, dashes, theft, gas/fire, Intermission). `battle.gd` keeps thin wrappers (`steal`, `update_dash`, `update_larceny`) that tests call.
+- Fields now have `kind` (`gas` or `fire`) and `anchored`; only gas reduces healing.
+- Five new items and a data-driven evolution system (`Catalog.ITEMS[id].evolve`, `battle.advance_item`, `battle.is_evolved`). Evolving: Execution Blade, First Hit Hammer, Bodyguard Vest, Lucky Coin, Lane Rations, Tempered Sole.
+- Fixed: `curse` never counted down; `ambush_cd`/`cloak_cd` only counted down while dead; unused unit fields and helper functions removed.
+- Save migration keeps the roster when a hero is retired. Tooltips show evolution. Evolved items show in gold.
+- `play.ps1` no longer contains a personal path. Removed unused portraits (atlas, bastion, hex, lucy, mender, rally, rook, volt) and the alias tests `ui_test.gd` / `content_test.gd`. Kept `mexai-assortment.png` / `mexai.tres` as source art.
+- Rival squads 1 and 2 now use the new heroes and items. The site pages, `_config.yml`, `SETUP.md`, README and this file were rewritten to match the code.
 
 ### Files changed
-- `scripts/expressions.gd`, `scripts/expression_editor.gd` and `.uid` files
-- `scripts/app_shell.gd`, `scripts/battle.gd`, `scripts/battle_view.gd`, `scripts/loadout_panel.gd`
-- `tests/expression_test.gd`, `tests/expression_editor_test.gd` and `.uid` files
-- Both expression-sheet PNGs and `.import` files; retained previous Mexai assortment PNG, `.import` and `.tres` source assets
-- `docs/EXPRESSIONS.md`, `README.md`, `AGENTS.md`
+- `scripts/catalog.gd`, `scripts/battle.gd`, new `scripts/hero_kits.gd`, `scripts/battle_view.gd`, `scripts/app_shell.gd`, `scripts/loadout_panel.gd`
+- New `assets/poppet.svg`, `crash_test.svg`, `kiln.svg`, `sunday.svg`; removed unused SVGs
+- New `tests/roster_items_test.gd`; updated `tests/rework_test.gd`, `tests/display_test.gd`; removed `tests/ui_test.gd`, `tests/content_test.gd`
+- New `tools/balance_probe.gd`, `docs/CONTENT.md`; updated docs, site pages, `play.ps1`, `_config.yml`, `SETUP.md`, `README.md`, `AGENTS.md`
 
 ### Validation run
-- Godot 4.7.2 headless editor import passed.
-- Expression, expression-editor, UI/navigation, rework, session and battle checks passed. Battle test exercised nine full matches.
-- Native editor capture inspected: cleaned portraits and Save/Cancel controls visible; dialog sizing has a regression check.
-- `git diff --check` passed. Tests used isolated `.local-data/final-*` and `.local-data/import-*` directories.
+- Godot 4.7.2 (Linux) headless import passed with no script errors.
+- All headless tests passed: roster_items, rework, battle (nine full matches), navigation, map, duel, jungle, handoff, session, expression, expression_editor.
+- Balance probe (45 random squads): per-hero win rates 0.34–0.63; Irene is highest (pre-existing), Eleanor lowest. Matches ended in about 3–8 minutes.
+- Under xvfb, screenshots of Team Builder and a live game with all four new heroes were inspected. display_test was not run.
 
 ### Known problems / warnings
-- Godot emits the existing Windows root certificate store warning; checks passed.
-- Imports require regular grids; bottom crop handles captions. Pale enclosed areas remain part of the artwork.
-- Editor changes apply immediately to current replay presentation. Prior uploads are retained when replaced.
-- Pre-existing `project.godot` line-ending-only status was preserved; no project setting change is needed.
+- New hero numbers are prototype tuning. Crash Test's charge misses about 15% of the time.
+- Invisible Cloak only triggers on reinforcement rotations and approaches from 150+ units away, not on camp-farming rotations.
+- Linux headless runs print the normal ALSA "no audio" warning.
 
 ### Next recommended action
-Open Team Builder → Character expressions to import additional heroes or adjust reaction rules.
+Replace the four first-pass kits with Lucy's intended designs, then rerun `tools/balance_probe.gd` and `tests/roster_items_test.gd`.
 
 ---
 ## 14. Decision Log
@@ -458,24 +463,31 @@ Add entries only for decisions with future consequences.
 | 2026-09-15 | Prefer fewer, broader abilities and avoid unnecessary bespoke mechanics. | Preserve readability and hero identity. | Hero design |
 | 2026-09-15 | Controlled randomness, including projectile misses, is part of spectator suspense. | Outcomes should remain uncertain and watchable. | Combat/AI/RNG |
 | 2026-09-15 | Items should create statistical questions or entertaining visible outcomes. | Supports HERO//VAULT's viewing-first identity. | Items/stats/UI |
+| 2026-09-15 | Tank-carry superhero (Atlas) is parked and removed from the game. | User request. | Catalog, battle, assets |
+| 2026-09-15 | Items evolve once, at an announced threshold, and only for their owner. | Burst evolution creates spectator events; theft stays temporary. | Catalog `evolve`, battle item rules, UI |
+| 2026-09-15 | Hero-specific rules live in `hero_kits.gd` as static functions. | Keeps `battle.gd` generic without a battle↔kit reference cycle. | Simulation architecture |
 
 ---
 
 ## 15. Known Issues / Open Questions
 
-These are intentionally unresolved until the repo is inspected:
+Answered from the code (2026-09-15):
 
-- What engine/framework is currently canonical?
-- Where is hero data stored?
-- Is the simulation deterministic when given a seed?
-- What is the current hit/miss model?
-- How are AI attack tendencies represented?
-- How are match statistics stored and surfaced?
-- How is the 13-level curve implemented?
-- Are ultimate timers global, per-hero, or modified by stats/items?
-- Which discussed heroes are implemented versus concept-only?
-- Which items are implemented versus concept-only?
-- Is there already a docs site or GitHub Pages workflow?
+- Engine: Godot 4.7.2, GDScript.
+- Hero data: `scripts/catalog.gd`; hero behavior: `scripts/hero_kits.gd`.
+- Determinism: yes; one `RandomNumberGenerator` seeded per match (`tests/roster_items_test.gd` and `rework_test.gd` check it).
+- Hit/miss: projectiles are simulated and can be dodged; melee has a windup and a range check; Crash Test's charge can be sidestepped.
+- AI tendencies: 1–5 ratings in `Catalog.PROFILES`, plus per-hero `target_bias` in `hero_kits.gd`.
+- Statistics: `battle.records` rows, exported with `export_csv`.
+- Levels: `Catalog.MAX_LEVEL = 13`; XP needed per level = `level × XP_PER_LEVEL`.
+- Ultimate timers: per hero (`Catalog.ULTIMATES`); not currently modified by items.
+- Docs site: Jekyll from the repository root.
+
+Still open:
+
+- Final kits for Poppet, Crash Test, Kiln and Sunday.
+- Spectator world objects beyond the Idol, and object possession history.
+- The tank-carry archetype (parked), the shark pirate and the cloning mascot.
 
 ---
 

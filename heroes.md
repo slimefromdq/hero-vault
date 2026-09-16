@@ -7,32 +7,30 @@ title: Heroes
 
 [Overview](./) · [Heroes](heroes.html) · [Systems](systems.html) · [Items](items.html) · [Roadmap](roadmap.html) · [Agent Handoff](agent-handoff.html)
 
-HERO//VAULT heroes should be legible characters first and bundles of mechanics second.
+HERO//VAULT heroes should be legible characters first and bundles of mechanics second: a clear attack, one signature ability, and one ultimate on a long timer.
 
-## Kit philosophy
+## Implemented roster
 
-A strong hero usually has:
-- a clear attack pattern;
-- a small number of signature abilities;
-- a passive only when it materially changes identity;
-- an ultimate on a long timer/cooldown.
+| Hero | Category | Role | In one sentence |
+|---|---|---|---|
+| Hazmat | Other | Juggernaut | Wins by standing in his own poison cloud and hitting very hard. |
+| Irene | Circus | Duelist | Wins by turning violence into staying alive. |
+| Oddity | Circus | Controller | Wins by teleporting, stealing other ultimates and freezing the fight. |
+| Mexai | Fantasy | Roamer / thief | Wins by impulsively stealing the enemy's best item. |
+| Eleanor | Fantasy | Protector | Wins by throwing herself between allies and danger. |
+| Yellow Colony | Other | Growing frontline | Wins by literally getting bigger every two levels. |
+| Poppet | Objects given life | Hex marksman | Wins by making enemies feel every needle she takes. |
+| Crash Test | Objects given life | Reckless initiator | Wins by charging in, or by whiffing and sitting there dazed. |
+| Kiln | Objects given life | Zone / siege | Wins by setting the lane on fire and cooking towers. |
+| Sunday | Other | Support | Wins by making sure nobody on her team has to work too hard. |
 
-Prefer one broad, expressive ability over several narrow abilities that occupy the same conceptual space.
+Full kits and numbers: [docs/CONTENT.md](docs/CONTENT.md).
+
+## Not built yet
+
+- A superhero tank who becomes a carry across the 13 levels (parked).
+- A shark pirate, and an anime mascot/toy character who clones herself with hive-mind flavor.
 
 ## Uncertainty
 
-Heroes are simulated actors. Projectile travel, positioning, tendencies, target movement, timing, and controlled randomness can create misses and surprising outcomes.
-
-The rule is not “anything can happen.” The rule is “the same hero can produce different stories while remaining recognizably themselves.”
-
-## Current category examples
-
-| Category | Examples |
-|---|---|
-| Objects given life | Poppet, Crash Test, Kiln |
-| Fantasy | Eleanor, Mexai |
-| Circus | Oddity, Irene |
-
-Other concepts discussed include Hazmat, Sunday, a shark pirate, and an anime mascot/toy character with cloning and hive-mind flavor.
-
-> Implementation status for every named hero must be verified in the repository.
+Projectile travel, positioning, tendencies, target movement, timing and controlled (seeded) randomness create misses and surprising outcomes. The same hero can produce different stories while remaining recognizably themselves.

@@ -24,6 +24,6 @@ Completed games retain their results and available highlights for the current ap
 
 ## Validation
 
-`navigation_test.gd` checks page separation, drafts across tab switches, queued-state isolation, independent queues, background progress, closing/reopening tabs, per-game camera/replay state, targeted pausing, single completion rewards, saved-profile migration and the concurrent-queue cap. `ui_test.gd` delegates to this current UI specification. `session_test.gd` runs a complete queued set through the extracted session model. Existing combat checks remain applicable. Native Godot screenshots of Home, Team Builder and a game were visually inspected.
+`navigation_test.gd` checks page separation, drafts across tab switches, queued-state isolation, independent queues, background progress, closing/reopening tabs, per-game camera/replay state, targeted pausing, single completion rewards, saved-profile migration and the concurrent-queue cap. `session_test.gd` runs a complete queued set through the extracted session model. Existing combat checks remain applicable. Native Godot screenshots of Home, Team Builder and a game were visually inspected.
 
 Run tests with a separate Godot user-data directory; UI tests deliberately write a fixture profile. Native `display_test.gd` checks F11 and camera shortcuts using a real window.

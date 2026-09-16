@@ -1,4 +1,4 @@
-> Historical design reference. Current kits, items, map sizing and Oddity behavior are superseded by REWORK_2026-09-15.md.
+> Historical design reference. Current kits and items are in CONTENT.md; map sizing and Oddity behavior are in REWORK_2026-09-15.md. The Tank Carry superhero (section 7) is parked for now.
 
 # hero//vault — Development Handoff
 
