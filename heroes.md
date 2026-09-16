@@ -20,9 +20,9 @@ HERO//VAULT heroes should be legible characters first and bundles of mechanics s
 | Eleanor | Fantasy | Protector | Wins by throwing herself between allies and danger. |
 | Yellow Colony | Other | Growing frontline | Wins by literally getting bigger every two levels. |
 | Poppet | Objects given life | Hex marksman | Wins by making enemies feel every needle she takes. |
-| Crash Test | Objects given life | Reckless initiator | Wins by charging in, or by whiffing and sitting there dazed. |
+| Crash Test | Objects given life | Tank / Disruptor | Wins by catapulting across the map and turning every collision into a weapon. |
 | Kiln | Objects given life | Zone / siege | Wins by setting the lane on fire and cooking towers. |
-| Sunday | Other | Support | Wins by making sure nobody on her team has to work too hard. |
+| Sunday | Other | Support / Artillery | Wins when the battle comes to her: slow, gigantic, consequential sunlight. |
 
 Full kits and numbers: [docs/CONTENT.md](docs/CONTENT.md).
 

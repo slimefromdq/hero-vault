@@ -31,6 +31,10 @@ Ultimates use **long timers** (75–120s) that keep running through death. Each 
 
 Ranged attacks are real projectiles that can miss moving targets; heroes sidestep visible shots. Melee attacks have a windup and miss if the target leaves range. Crash Test's charge can be sidestepped.
 
+## Stability and collisions
+
+Every hero has a Stability rating (1–10) that scales how far knockbacks push them. A hero pushed into the lane edge takes a wall slam (small damage and a brief stun). Crash Test has Stability 1 and is built for crashes.
+
 ## Statistics and events
 
 Every match records structured events (damage, healing, kills, casts, projectile hits and misses, item activations, thefts, evolutions, cloak reveals and gank outcomes, Idol possession) and exports them as CSV for analysis in R.

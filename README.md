@@ -16,7 +16,7 @@ F11 toggles fullscreen. Click a hero or press 1–5 to follow; scroll to zoom; 0
 
 Ten heroes: Hazmat, Irene, Oddity, Mexai, Eleanor, Yellow Colony, **Poppet**, **Crash Test**, **Kiln** and **Sunday**. Fourteen items, including **Ambush Shield**, **Invisible Cloak** and three 1-point items (Lane Rations, Scout Pin, Tempered Sole). Six items **evolve** once into a stronger named version at a visible threshold. The Double Damage Idol is a jungle pickup, never a purchasable item.
 
-Full kits, numbers and evolution rules: [docs/CONTENT.md](docs/CONTENT.md). Design direction: [docs/DESIGN.md](docs/DESIGN.md).
+Heroes have a Stability stat: knockbacks scale with it, and heroes knocked into the lane edge take a wall slam. Full kits, numbers and evolution rules: [docs/CONTENT.md](docs/CONTENT.md). Design direction: [docs/DESIGN.md](docs/DESIGN.md).
 
 Old saves keep their progression. Retired heroes are swapped one-for-one for unused current heroes, and retired equipment becomes empty slots.
 

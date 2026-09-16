@@ -12,13 +12,14 @@ This page should stay short and current.
 ## Done (September 2026)
 
 - Tabbed app, three-game sets, character expressions.
-- Poppet, Crash Test, Kiln and Sunday (first-pass kits).
+- Poppet, Crash Test, Kiln and Sunday. Crash Test and Sunday follow their design sheets.
+- Stability, knockback and wall collisions.
 - Ambush Shield, Invisible Cloak, Lane Rations, Scout Pin, Tempered Sole.
 - One-time burst evolution for six items.
 
 ## Next
 
-- Final designs for Poppet, Crash Test, Kiln and Sunday; tune numbers with `tools/balance_probe.gd`.
+- Final designs for Poppet and Kiln; tune numbers with `tools/balance_probe.gd`.
 - Spectator world objects beyond the Idol (for example Cooldown Shard, Treasure Goblin), with about three active per match.
 - Match history for important objects (holders, time held, kills while held).
 - Statistical sanity tests over many seeded matches.

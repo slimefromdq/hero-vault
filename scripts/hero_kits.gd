@@ -51,34 +51,46 @@ static func signature(b, u: Dictionary, enemy: Dictionary) -> void:
 				b.record_event("stitch", u.id, enemy.id, 5.0)
 				b.log_event("STITCHED", u.name + " binds " + enemy.name + ". Hurting Poppet now hurts them too.", "curse", u.id)
 		"crash_test":
-			if hero_enemy and distance > 70 and distance < 230:
-				# Aim at where the target is now; the charge does not steer.
-				var direction: Vector2 = u.pos.direction_to(enemy.pos)
-				u.dash = {"kind": "ram", "target": enemy.id, "dest": MapLayout.constrain(u.pos+direction*(distance+20), u.lane), "time": 0.8}
-				u.ability = 11
-				b.log_event("IMPACT TEST", u.name + " charges at " + enemy.name + ".", "charge_ram", u.id)
-				# Agile duelists may see it coming and step aside (seeded roll).
-				var dodge: float = 0.08 + enemy.behavior.dueling*0.05 + maxf(0, enemy.speed-45)*0.006
-				if enemy.stun <= 0 and enemy.swing <= 0 and b.rng.randf() < dodge:
-					var side: Vector2 = direction.orthogonal()*(1.0 if b.rng.randf() < 0.5 else -1.0)
-					enemy.pos = MapLayout.constrain(enemy.pos+side*(u.radius+enemy.radius+14), enemy.lane)
-					enemy.intent = "Sidestep the charge"
-					b.record_event("ram_dodge", enemy.id, u.id)
+			var landing: Dictionary = full_send_target(b, u)
+			if not landing.is_empty():
+				launch_full_send(b, u, landing)
+				u.ability = 14
 		"kiln":
 			if has_enemy and distance < u.reach+20:
 				start_fire(b, u, enemy.pos, 70.0, 6.0, 8.0+u.level*1.1)
 				u.ability = 11
 		"sunday":
-			var ally: Dictionary = b.weakest_ally(u, 260)
-			var patient: Dictionary = {}
-			if not ally.is_empty() and ally.hp/ally.max_hp < 0.7:
-				patient = ally
-			elif u.hp/u.max_hp < 0.5:
-				patient = u
-			if not patient.is_empty():
-				b.heal(u, patient, 55.0+u.level*6.0)
-				u.ability = 9
-				b.log_event("DAY OF REST", u.name + " restores " + patient.name + ".", "rest", u.id)
+			# Warmth: she walks toward a wounded ally first, even into a bad fight.
+			var ally: Dictionary = wounded_ally(b, u, 320)
+			if not ally.is_empty():
+				if u.pos.distance_to(ally.pos) <= 110:
+					start_warmth(b, u)
+				else:
+					u.dash = {"kind": "walk", "target": ally.id, "time": 6.0}
+					u.intent = "Hurry to help " + ally.name
+				u.ability = 12
+			elif u.hp/u.max_hp < 0.5 and has_enemy:
+				start_warmth(b, u)
+				u.ability = 12
+
+## Second ability, on its own timer (ability2).
+static func signature2(b, u: Dictionary, enemy: Dictionary) -> void:
+	match u.portrait:
+		"sunday":
+			var target: Dictionary = flare_target(b, u)
+			if not target.is_empty():
+				b.launch_orb(u, target.pos, (70.0+u.level*7.0)*b.crown_multiplier(u))
+				u.ability2 = 13
+				b.log_event("FLARE", u.name + " lobs a slow solar orb at " + target.name + ". Get out of the way.", "flare", u.id)
+		"crash_test":
+			var crowd := 0
+			for other in b.units:
+				if other.team != u.team and not other.creep and other.hp > 0 and other.pos.distance_to(u.pos) < 120:
+					crowd += 1
+			if crowd >= 3 or (u.hp/u.max_hp < 0.4 and not enemy.is_empty() and u.pos.distance_to(enemy.pos) < 150):
+				u.safety = 4.0
+				u.ability2 = 16
+				b.log_event("SAFETY RATING: ZERO", u.name + " locks every joint. No.", "safety", u.id)
 
 ## Extra per-hero conditions before spending an available ultimate.
 static func ultimate_held(b, u: Dictionary, enemy: Dictionary) -> bool:
@@ -90,11 +102,20 @@ static func ultimate_held(b, u: Dictionary, enemy: Dictionary) -> bool:
 			return u.attacks < 3
 		"eleanor":
 			return b.weakest_ally(u, 160).is_empty()
-		"crash_test", "colony":
+		"colony":
 			return distance > 150
+		"crash_test":
+			return count_heroes(b, u.pos, 180, 1-u.team) < 2
 		"sunday":
-			var ally: Dictionary = b.weakest_ally(u, 230)
-			return (ally.is_empty() or ally.hp/ally.max_hp > 0.6) and u.hp/u.max_hp > 0.5
+			var best := 0
+			for hero in b.units:
+				if hero.creep or hero.hp <= 0 or hero.team == u.team or not hero.flight.is_empty() or u.pos.distance_to(hero.pos) > 320:
+					continue
+				var crowd: int = count_heroes(b, hero.pos, 170, -1)
+				if crowd > best:
+					best = crowd
+					u.sun_center = hero.pos
+			return best < 3
 	return false
 
 static func resolve(b, u: Dictionary, effect: String, damage: float) -> void:
@@ -123,20 +144,19 @@ static func resolve(b, u: Dictionary, effect: String, damage: float) -> void:
 			for i in range(5):
 				b.launch(u, Vector2.from_angle(aim+(i-2)*0.14), damage*b.crown_multiplier(u), 560.0)
 		"crash_test":
-			u.write_off = 8.0
-			u.write_off_scale = u.cast_scale
-			u.write_off_stored = 0.0
-			b.grant_shield(u, u, (120+u.level*6)*u.cast_scale, 8)
+			u.program = 8.0*u.cast_scale
+			u.program_scale = u.cast_scale
+			u.program_cd = 0.0
 		"kiln":
 			var target: Dictionary = b.get_unit(u.charge_target)
 			var center: Vector2 = u.pos if target.is_empty() else u.pos.move_toward(target.pos, 90)
 			b.area_hit(u, center, 110, damage)
 			start_fire(b, u, center, 110.0, 5.0, (10.0+u.level*1.4)*u.cast_scale)
 		"sunday":
-			for ally in b.units:
-				if ally.team == u.team and not ally.creep and ally.hp > 0 and ally.pos.distance_to(u.pos) < 230:
-					ally.rest = 5.0*u.cast_scale
-					ally.rest_source = u.id
+			var center: Vector2 = u.sun_center if u.sun_center != Vector2.ZERO else u.pos
+			b.fields.append({"kind": "sun", "anchored": true, "pos": center, "source": u.id, "team": u.team, "time": 7.0*u.cast_scale,
+				"tick": 0.0, "radius": 170.0, "overload": false, "damage": damage})
+			u.sun_center = Vector2.ZERO
 
 # --- AI quirks -----------------------------------------------------------------
 
@@ -160,12 +180,21 @@ static func target_bias(b, u: Dictionary, enemy: Dictionary) -> float:
 		"poppet":
 			return -60.0 if enemy.curse > 0 and enemy.curse_source == u.id else 0.0
 		"crash_test":
-			return -enemy.max_hp*0.05 # Picks the biggest thing in the lane.
+			var bias: float = -40.0*(1.0-enemy.hp/enemy.max_hp)
+			if b.fighting_team(enemy, u.team):
+				bias -= 80.0
+			return bias
+		"sunday":
+			return -50.0 if b.fighting_team(enemy, u.team) else 0.0
 	return 0.0
 
 ## Heavy melee commits to its swing instead of circling.
 static func holds_ground(_b, u: Dictionary) -> bool:
-	return u.portrait in ["hazmat", "eleanor"]
+	return u.portrait in ["hazmat", "eleanor", "crash_test"]
+
+## Fraction of basic-attack range a hero tries to fight from.
+static func preferred_range(_b, u: Dictionary) -> float:
+	return 0.95 if u.portrait == "sunday" else 0.78
 
 static func siege_multiplier(_b, u: Dictionary) -> float:
 	return 1.5 if u.portrait == "kiln" else 1.0
@@ -173,6 +202,8 @@ static func siege_multiplier(_b, u: Dictionary) -> float:
 static func on_melee_hit(b, u: Dictionary, target: Dictionary) -> void:
 	if u.portrait == "hazmat" and target.hp > 0:
 		b.stagger(target, 0.35)
+	elif u.portrait == "crash_test" and target.hp > 0:
+		b.knockback(target, u.pos, 38.0, u.id)
 
 static func melee_cleaves(_b, u: Dictionary) -> bool:
 	return u.portrait == "eleanor"
@@ -180,18 +211,18 @@ static func melee_cleaves(_b, u: Dictionary) -> bool:
 # --- Ongoing effects -----------------------------------------------------------
 
 static func tick(b, u: Dictionary, dt: float) -> void:
-	if u.write_off > 0:
-		u.write_off = maxf(0, u.write_off-dt)
-		if u.write_off <= 0:
-			detonate(b, u)
-	if u.rest > 0:
-		u.rest = maxf(0, u.rest-dt)
-		var source: Dictionary = b.get_unit(u.rest_source)
-		b.heal(u if source.is_empty() else source, u, u.max_hp*0.05*dt)
+	for timer in ["safety", "program", "program_cd"]:
+		u[timer] = maxf(0, u[timer]-dt)
+	if u.warmth > 0:
+		u.warmth = maxf(0, u.warmth-dt)
+		u.warmth_tick -= dt
+		if u.warmth_tick <= 0:
+			u.warmth_tick = 0.5
+			for ally in b.units:
+				if ally.team == u.team and not ally.creep and ally.hp > 0 and ally.pos.distance_to(u.pos) < 130:
+					b.heal(u, ally, (10.0+u.level)*0.5)
 
-static func on_damaged(b, target: Dictionary, actual: float, absorbed: float, _source_id: int) -> void:
-	if target.write_off > 0:
-		target.write_off_stored += actual+absorbed
+static func on_damaged(b, target: Dictionary, actual: float, _absorbed: float, _source_id: int) -> void:
 	if b.mirroring or actual <= 0:
 		return
 	b.mirroring = true
@@ -201,31 +232,170 @@ static func on_damaged(b, target: Dictionary, actual: float, absorbed: float, _s
 			b.record_event("stitch_mirror", target.id, bound.id, actual*0.35, {"damage_type": "magic"})
 	b.mirroring = false
 
-static func on_death(b, target: Dictionary) -> void:
-	if target.write_off > 0:
-		detonate(b, target)
-	target.rest = 0.0
-	target.curse = 0.0
+static func on_death(_b, target: Dictionary) -> void:
+	for timer in ["curse", "warmth", "safety", "program"]:
+		target[timer] = 0.0
+	target.flight.clear()
 
-static func detonate(b, u: Dictionary) -> void:
+## Resolve bonus from Sunday's Warmth aura or a friendly BEAUTIFUL DAY.
+static func resolve_bonus(b, target: Dictionary) -> float:
+	var bonus := 0.0
+	for ally in b.units:
+		if ally.team == target.team and ally.warmth > 0 and ally.hp > 0 and ally.pos.distance_to(target.pos) < 130:
+			bonus = 15.0
+			break
+	for field in b.fields:
+		if field.kind == "sun" and field.team == target.team and target.pos.distance_to(field.pos) < field.radius:
+			bonus += 25.0
+			break
+	return bonus
+
+static func armor_bonus(_b, target: Dictionary) -> float:
+	return 40.0 if target.safety > 0 else 0.0
+
+static func speed_scale(_b, u: Dictionary) -> float:
+	return 0.6 if u.safety > 0 else 1.0
+
+## Knockback multiplier from Stability (1-10). SAFETY RATING: ZERO makes Crash Test nearly immovable.
+static func knockback_scale(_b, u: Dictionary) -> float:
+	if u.safety > 0:
+		return 0.15
+	return 1.45-0.09*u.stability
+
+## Crash Test is built for crashes: smaller wall damage, and nearby enemies get staggered.
+static func built_for_crashes(_b, u: Dictionary) -> bool:
+	return u.portrait == "crash_test"
+
+## Called whenever a hero is knocked back, lands from FULL SEND, or hits a wall.
+static func on_displaced(b, u: Dictionary, amount: float, cause: String) -> void:
+	if u.program <= 0 or u.program_cd > 0 or amount < 10 or u.hp <= 0:
+		return
+	u.program_cd = 0.4
 	var data: Dictionary = Catalog.ULTIMATES["crash_test"]
-	var damage: float = (data.damage+data.per_level*u.level+u.write_off_stored*0.5)*u.write_off_scale
-	u.write_off = 0.0
-	b.record_event("write_off_blast", u.id, -1, damage, {"ability": data.id})
-	b.log_event("TOTAL WRITE-OFF", u.name + " explodes for %d after absorbing %d." % [int(damage), int(u.write_off_stored)], "ultimate_release", u.id)
-	b.area_hit(u, u.pos, 130, damage)
-	u.write_off_stored = 0.0
+	var damage: float = (data.damage+data.per_level*u.level)*u.program_scale
+	b.record_event("crash_program_shockwave", u.id, -1, damage, {"ability": data.id, "detail": cause})
+	b.log_event("BOOM", u.name + " turns a " + cause + " into a shockwave.", "shockwave", u.id)
+	b.area_hit(u, u.pos, 90, damage)
+
+static func count_heroes(b, position: Vector2, radius: float, team: int) -> int:
+	var total := 0
+	for hero in b.units:
+		if not hero.creep and hero.hp > 0 and hero.flight.is_empty() and (team < 0 or hero.team == team) and hero.pos.distance_to(position) < radius:
+			total += 1
+	return total
+
+static func wounded_ally(b, u: Dictionary, reach: float) -> Dictionary:
+	var best: Dictionary = {}
+	var ratio := 0.7
+	for ally in b.units:
+		if ally.id != u.id and ally.team == u.team and not ally.creep and ally.hp > 0 and ally.flight.is_empty() and ally.hp/ally.max_hp < ratio and u.pos.distance_to(ally.pos) <= reach:
+			best = ally
+			ratio = ally.hp/ally.max_hp
+	return best
+
+static func start_warmth(b, u: Dictionary) -> void:
+	u.warmth = 5.0
+	u.warmth_tick = 0.0
+	b.log_event("WARMTH", u.name + " radiates healing light.", "warmth", u.id)
+
+## Flare prefers clustered or slow/stuck enemy heroes.
+static func flare_target(b, u: Dictionary) -> Dictionary:
+	var best: Dictionary = {}
+	var best_score := 0.0
+	for enemy in b.units:
+		if enemy.team == u.team or enemy.creep or enemy.hp <= 0 or enemy.invisible > 0 or not enemy.flight.is_empty():
+			continue
+		if u.pos.distance_to(enemy.pos) > u.reach+60:
+			continue
+		var score: float = count_heroes(b, enemy.pos, 80, -1)-1
+		if enemy.stun > 0 or enemy.swing > 0 or enemy.hold_line > 0 or enemy.speed < 42 or enemy.safety > 0:
+			score += 1.5
+		if score > best_score:
+			best_score = score
+			best = enemy
+	return best
+
+## FULL SEND prefers big, far-away fights where allies are already engaged.
+## It deliberately ignores its own safety: intentional target-selection stupidity.
+static func full_send_target(b, u: Dictionary) -> Dictionary:
+	var best: Dictionary = {}
+	var best_score := -INF
+	for enemy in b.units:
+		if enemy.team == u.team or enemy.creep or enemy.hp <= 0 or enemy.invisible > 0 or not enemy.flight.is_empty():
+			continue
+		var distance: float = u.pos.distance_to(enemy.pos)
+		if distance < 200 or distance > 650:
+			continue
+		var score: float = distance*0.3 + count_heroes(b, enemy.pos, 130, -1)*90.0
+		if b.fighting_team(enemy, u.team):
+			score += 120.0
+		if score > best_score:
+			best_score = score
+			best = enemy
+	return best
+
+static func launch_full_send(b, u: Dictionary, target: Dictionary) -> void:
+	var distance: float = u.pos.distance_to(target.pos)
+	# Aimed at where the target is now. No mid-flight correction: physics has the wheel.
+	u.flight = {"from": u.pos, "to": target.pos, "time": 0.0, "total": 0.6+distance/300.0, "distance": distance, "target": target.id}
+	u.charge = 0.0
+	u.rotation.clear()
+	u.camp_target = -1
+	b.record_event("full_send_launch", u.id, target.id, distance)
+	b.log_event("FULL SEND", u.name + " launches toward " + target.name + ". Something is approaching.", "full_send", u.id)
+
+static func update_flight(b, u: Dictionary, dt: float) -> void:
+	var flight: Dictionary = u.flight
+	flight.time += dt
+	var t: float = minf(1.0, flight.time/flight.total)
+	u.pos = flight.from.lerp(flight.to, t)
+	u.intent = "FULL SEND  -  airborne"
+	if t < 1.0:
+		return
+	# Land in whichever lane is closer; the jungle counts as "somewhere unhelpful".
+	var north: Dictionary = MapLayout.project(flight.to, 0)
+	var south: Dictionary = MapLayout.project(flight.to, 1)
+	u.lane = 0 if north.distance <= south.distance else 1
+	u.pos = MapLayout.constrain(flight.to, u.lane)
+	u.flight = {}
+	var travel: float = minf(flight.distance, 600.0)
+	var damage: float = (40.0+u.level*4.0)*(1.0+travel/400.0)*b.crown_multiplier(u)
+	var push: float = 20.0+travel*0.08
+	var hits := 0
+	for enemy in b.units:
+		if enemy.team == u.team or enemy.hp <= 0 or not enemy.flight.is_empty() or enemy.pos.distance_to(u.pos) > 75:
+			continue
+		if not enemy.creep:
+			hits += 1
+		var close: bool = enemy.pos.distance_to(u.pos) < 35
+		b.apply_damage(enemy, damage, u.id, false, "ability")
+		b.knockback(enemy, u.pos, push, u.id)
+		if close:
+			b.stagger(enemy, 0.9)
+	b.record_event("full_send_land", u.id, flight.target, hits, {"detail": "hit" if hits > 0 else "miss"})
+	if hits == 0:
+		b.log_event("FULL SEND MISSES", u.name + " lands on nobody. Profoundly unhelpful.", "full_send_miss", u.id)
+	else:
+		b.log_event("TOUCHDOWN", u.name + " lands on %d hero%s." % [hits, "" if hits == 1 else "es"], "full_send_hit", u.id)
+	on_displaced(b, u, travel, "landing")
 
 static func update_dash(b, u: Dictionary, dt: float) -> void:
 	var action: Dictionary = u.dash
 	var target: Dictionary = b.get_unit(action.target)
-	if action.kind == "ram":
-		update_ram(b, u, dt)
-		return
 	if target.is_empty() or target.hp <= 0 or u.stun > 0:
 		u.dash.clear()
 		return
 	u.dash.time -= dt
+	if action.kind == "walk":
+		# Sunday waddles toward the ally at her normal pace, then casts Warmth.
+		u.pos = MapLayout.move_on_lane(u.pos, target.pos, u.lane, b.movement_speed(u, target.pos)*dt)
+		u.intent = "Hurry to help " + target.name
+		if u.pos.distance_to(target.pos) <= 110:
+			start_warmth(b, u)
+			u.dash.clear()
+		elif u.dash.time <= 0:
+			u.dash.clear()
+		return
 	u.pos = MapLayout.move_on_lane(u.pos, target.pos, u.lane, 350*dt)
 	u.intent = "Leeching Cut" if action.kind == "leech" else "Intercede"
 	if u.pos.distance_to(target.pos) < u.radius+target.radius+15:
@@ -244,34 +414,11 @@ static func update_dash(b, u: Dictionary, dt: float) -> void:
 			u.saves += 1
 			for enemy in b.units:
 				if enemy.team != u.team and enemy.hp > 0 and enemy.pos.distance_to(u.pos) < 95:
-					enemy.pos = MapLayout.constrain(enemy.pos+u.pos.direction_to(enemy.pos)*65, enemy.lane)
+					b.knockback(enemy, u.pos, 65.0, u.id)
 			b.log_event("INTERCEDE", u.name+" shields "+target.name+" and drives enemies back.", "shield", u.id)
 		u.dash.clear()
 	elif u.dash.time <= 0:
 		b.record_event("dash_miss", u.id, target.id)
-		u.dash.clear()
-
-static func update_ram(b, u: Dictionary, dt: float) -> void:
-	var action: Dictionary = u.dash
-	action.time -= dt
-	u.intent = "Impact Test"
-	var before: Vector2 = u.pos
-	u.pos = MapLayout.constrain(u.pos.move_toward(action.dest, 420*dt), u.lane)
-	for enemy in b.units:
-		if enemy.team == u.team or enemy.creep or enemy.hp <= 0:
-			continue
-		var point := Geometry2D.get_closest_point_to_segment(enemy.pos, before, u.pos)
-		if point.distance_to(enemy.pos) < u.radius+enemy.radius-2:
-			b.apply_damage(enemy, (50+u.level*5)*b.crown_multiplier(u), u.id, false, "ability")
-			b.stagger(enemy, 0.8)
-			b.log_event("CRASH", u.name + " flattens " + enemy.name + ".", "crash", u.id)
-			b.record_event("ram_hit", u.id, enemy.id)
-			u.dash.clear()
-			return
-	if action.time <= 0 or u.pos.distance_to(action.dest) < 2 or u.pos == before:
-		u.stun = maxf(u.stun, 0.9)
-		b.record_event("dash_miss", u.id, action.target)
-		b.log_event("WHIFF", u.name + " misses the charge and sits there dazed.", "ram_miss", u.id)
 		u.dash.clear()
 
 # --- Shared hero helpers -------------------------------------------------------

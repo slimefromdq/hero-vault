@@ -63,7 +63,7 @@ Implemented (see `docs/CONTENT.md` and `scripts/catalog.gd`):
 - **Circus:** Oddity, Irene
 - **Other:** Hazmat, Yellow Colony, Sunday
 
-Poppet, Crash Test, Kiln and Sunday are first-pass kits built from their names and categories; the user may replace them.
+Crash Test and Sunday follow the user's design sheets (see `docs/CONTENT.md`). Poppet and Kiln are first-pass kits built from their names and categories; the user may replace them.
 
 Concept only: a shark pirate; an anime mascot/toy character who clones herself (hive-mind flavor); a superhero tank-carry (Atlas, **parked** on 2026-09-15; do not re-add without being asked).
 
@@ -419,37 +419,32 @@ Never leave the next agent with “continue where I left off” and no coordinat
 ## 13. Session Handoff
 
 ### Current objective
-Add Poppet, Crash Test, Kiln and Sunday; remove the tank carry; add Ambush Shield, Invisible Cloak, Lane Rations, Scout Pin and Tempered Sole; add one-time item evolution; clean up docs, launcher, assets and tests.
+Rebuild Crash Test and Sunday from the user's design sheets (2026-09-16). This builds on the earlier session that added four heroes, five items and item evolution, and removed Atlas.
 
 ### What changed
-- Four new heroes with first-pass kits (see `docs/CONTENT.md`). Atlas removed from data, rivals, code and assets.
-- Hero-specific logic moved out of `battle.gd` into static functions in `scripts/hero_kits.gd` (signature, ultimate hold rules, resolve, target bias, ticks, dashes, theft, gas/fire, Intermission). `battle.gd` keeps thin wrappers (`steal`, `update_dash`, `update_larceny`) that tests call.
-- Fields now have `kind` (`gas` or `fire`) and `anchored`; only gas reduces healing.
-- Five new items and a data-driven evolution system (`Catalog.ITEMS[id].evolve`, `battle.advance_item`, `battle.is_evolved`). Evolving: Execution Blade, First Hit Hammer, Bodyguard Vest, Lucky Coin, Lane Rations, Tempered Sole.
-- Fixed: `curse` never counted down; `ambush_cd`/`cloak_cd` only counted down while dead; unused unit fields and helper functions removed.
-- Save migration keeps the roster when a hero is retired. Tooltips show evolution. Evolved items show in gold.
-- `play.ps1` no longer contains a personal path. Removed unused portraits (atlas, bastion, hex, lucy, mender, rally, rook, volt) and the alias tests `ui_test.gd` / `content_test.gd`. Kept `mexai-assortment.png` / `mexai.tres` as source art.
-- Rival squads 1 and 2 now use the new heroes and items. The site pages, `_config.yml`, `SETUP.md`, README and this file were rewritten to match the code.
+- **Crash Test:** Impact Test knockback punch; FULL SEND ballistic launch (`flight` state, lane change on landing, can miss); SAFETY RATING: ZERO; CRASH PROGRAM shockwaves on displacement. Stats and AI follow the sheet. Replaced the earlier charge/Write-Off kit.
+- **Sunday:** slow splash Sunbeam; Warmth aura with walk-to-ally AI (dash kind `walk`); Flare slow orb (`battle.launch_orb`, `explode`); BEAUTIFUL DAY `sun` field. Replaced Day of Rest/Sunday Best.
+- **New shared systems in `battle.gd`:** `knockback` scaled by the Stability stat, `wall_slam`, a second ability timer (`ability2`, `Kits.signature2`), `fighting_team`, `in_sunlight`. Heroes have `stability` and an optional `size`. Anchored fields (fire, sun) now outlive their owner. Eleanor's Intercede push uses `knockback`.
+- **Earlier session (same branch):** Poppet, Kiln, five items, burst item evolution, `hero_kits.gd` split, save migration, launcher/docs/asset cleanup.
 
 ### Files changed
-- `scripts/catalog.gd`, `scripts/battle.gd`, new `scripts/hero_kits.gd`, `scripts/battle_view.gd`, `scripts/app_shell.gd`, `scripts/loadout_panel.gd`
-- New `assets/poppet.svg`, `crash_test.svg`, `kiln.svg`, `sunday.svg`; removed unused SVGs
-- New `tests/roster_items_test.gd`; updated `tests/rework_test.gd`, `tests/display_test.gd`; removed `tests/ui_test.gd`, `tests/content_test.gd`
-- New `tools/balance_probe.gd`, `docs/CONTENT.md`; updated docs, site pages, `play.ps1`, `_config.yml`, `SETUP.md`, `README.md`, `AGENTS.md`
+- `scripts/catalog.gd`, `scripts/hero_kits.gd`, `scripts/battle.gd`, `scripts/battle_view.gd`
+- `tests/roster_items_test.gd`
+- `docs/CONTENT.md`, `README.md`, `heroes.md`, `systems.md`, `roadmap.md`, `AGENTS.md`
 
 ### Validation run
-- Godot 4.7.2 (Linux) headless import passed with no script errors.
-- All headless tests passed: roster_items, rework, battle (nine full matches), navigation, map, duel, jungle, handoff, session, expression, expression_editor.
-- Balance probe (45 random squads): per-hero win rates 0.34–0.63; Irene is highest (pre-existing), Eleanor lowest. Matches ended in about 3–8 minutes.
-- Under xvfb, screenshots of Team Builder and a live game with all four new heroes were inspected. display_test was not run.
+- Godot 4.7.2 headless: roster_items, rework, battle (nine full matches), navigation, map, duel, jungle, handoff, session, expression and expression_editor all pass.
+- Event probe over six matches: FULL SEND missed 20 of 111 landings; Flare missed 17 of 134 bursts. Wall slams and CRASH PROGRAM shockwaves occur.
+- Balance probe (45 squads): win rates 0.38–0.66; Crash Test 0.39, Sunday 0.38, Irene 0.66.
+- Screenshots under xvfb show the FULL SEND arc/landing marker, the Flare orb and the BEAUTIFUL DAY zone. display_test hangs under xvfb without a window manager, on the original code too.
 
 ### Known problems / warnings
-- New hero numbers are prototype tuning. Crash Test's charge misses about 15% of the time.
-- Invisible Cloak only triggers on reinforcement rotations and approaches from 150+ units away, not on camp-farming rotations.
-- Linux headless runs print the normal ALSA "no audio" warning.
+- Lanes are only 88 units wide, so wall slams are common; the fight story logs only strong slams and Crash Test's.
+- FULL SEND can fire in the first seconds of a match (cross-lane launch). This is intended but may be tuned.
+- All new numbers are prototype tuning.
 
 ### Next recommended action
-Replace the four first-pass kits with Lucy's intended designs, then rerun `tools/balance_probe.gd` and `tests/roster_items_test.gd`.
+Replace Poppet's and Kiln's first-pass kits with the user's designs when they arrive, then rerun `tools/balance_probe.gd` and `tests/roster_items_test.gd`.
 
 ---
 ## 14. Decision Log
@@ -466,6 +461,8 @@ Add entries only for decisions with future consequences.
 | 2026-09-15 | Tank-carry superhero (Atlas) is parked and removed from the game. | User request. | Catalog, battle, assets |
 | 2026-09-15 | Items evolve once, at an announced threshold, and only for their owner. | Burst evolution creates spectator events; theft stays temporary. | Catalog `evolve`, battle item rules, UI |
 | 2026-09-15 | Hero-specific rules live in `hero_kits.gd` as static functions. | Keeps `battle.gd` generic without a battle↔kit reference cycle. | Simulation architecture |
+| 2026-09-16 | Stability (1–10) scales knockback; lane edges cause wall slams. | Crash Test's design ("worst Stability, built for crashes") and general physical comedy. | battle `knockback`/`wall_slam`, catalog |
+| 2026-09-16 | Airborne heroes cannot be targeted or damaged. | FULL SEND must commit without mid-flight interaction. | battle, hero_kits flight |
 
 ---
 
@@ -485,7 +482,7 @@ Answered from the code (2026-09-15):
 
 Still open:
 
-- Final kits for Poppet, Crash Test, Kiln and Sunday.
+- Final kits for Poppet and Kiln.
 - Spectator world objects beyond the Idol, and object possession history.
 - The tank-carry archetype (parked), the shark pirate and the cloning mascot.
 

@@ -15,13 +15,21 @@ Supersedes the kit and item tables in [REWORK_2026-09-15.md](REWORK_2026-09-15.m
 | Eleanor | Fantasy | Slow, broad greatsword arc | Intercede: rush to a wounded ally, shield, knockback | Hold the Line: huge defenses, 35% ally damage interception, slowed (100s) |
 | Yellow Colony | Other | Melee swarm; grows every two levels | Area slam | All Together: larger slam and shield (100s) |
 | **Poppet** | Objects given life | Fast needles (620 speed) | **Stitch**: binds an enemy hero for 5s; 35% of damage Poppet takes is mirrored to them | **Pincushion**: five-needle fan; each needle can miss (85s) |
-| **Crash Test** | Objects given life | Bumper melee | **Impact Test**: straight-line charge, damage and 0.8s stun on the first hero in its path. Agile targets may sidestep (seeded). A whiff dazes Crash Test for 0.9s | **Total Write-Off**: 8s shield; then explodes for base damage + 50% of everything absorbed. Also explodes if destroyed early (95s) |
+| **Crash Test** *(The Human Safety Violation)* | Objects given life | **Impact Test**: slow, clumsy punch with big knockback | **FULL SEND** (14s): catapults 200–650 units at the target's *current* spot, across lanes if needed. Airborne: can't act, can't be hit. Landing: area damage and knockback (both grow with distance), 0.9s stun at the center. Can land on nobody. **SAFETY RATING: ZERO** (16s): 4s of +40 Armor, 85% less knockback, −40% speed; used when surrounded or badly hurt | **CRASH PROGRAM**: for 8s, every knockback, landing or wall hit emits a shockwave (95s) |
 | **Kiln** | Objects given life | Slow ember lob (240 speed, easy to dodge) | **Firing**: anchored burning patch under an enemy (max two fires) | **Open the Door**: wide blast plus a large fire (100s). Passive: +50% tower/vault damage |
-| **Sunday** | Other | Sunbeam | **Day of Rest**: instant heal on the most wounded nearby ally (or herself) | **Sunday Best**: allies nearby heal 25% max HP over 5s with +20% movement (90s) |
+| **Sunday** *(The Daystar Darling)* | Other | **Sunbeam**: slow (170), long-lived (4s), heavy bolt with a small splash | **Warmth** (12s): 5s healing aura (+15 Resolve); she walks toward a wounded ally to cast it, even into danger. **Flare** (13s): very slow (95) solar orb aimed at a clustered or stuck enemy; bursts where they *were*, or on whoever walks into it: heavy area damage, knockback, brief burn | **BEAUTIFUL DAY**: 7s stationary sun zone (radius 170) on a fight with 3+ heroes. Allies heal 3% max HP/s and gain +25 Resolve; enemies burn and are easier to target; hidden heroes are revealed. Stays even if Sunday falls (110s) |
 
-Poppet, Crash Test, Kiln and Sunday are first-pass interpretations built from their names and categories; expect their kits to change once their designs are written down.
+Crash Test and Sunday follow Lucy's design sheets (2026-09-16). Poppet and Kiln are still first-pass interpretations built from their names and categories.
 
-AI quirks: Poppet focuses her stitched target; Crash Test picks the biggest enemy; Kiln has 5 Waveclear/Siege and never roams; Sunday has 5 Protection, 1 Pursuit and hangs back.
+AI quirks: Poppet focuses her stitched target. Crash Test prefers enemies already fighting allies and low-HP targets, and FULL SEND deliberately prefers far, crowded fights over safe ones. Kiln has 5 Waveclear/Siege and never roams. Sunday fights from 95% of her range, rarely chases, favors enemies engaging her allies, and saves BEAUTIFUL DAY for crowds.
+
+## Stability, knockback and walls
+
+- Every hero has **Stability** (1–10). Knockback distance is multiplied by `1.45 − 0.09 × Stability` (Crash Test 1 → ×1.36; Kiln 9 → ×0.64). SAFETY RATING: ZERO sets it to ×0.15.
+- Knockback sources: Crash Test's punch and landing, Sunday's Flare, and Eleanor's Intercede.
+- A knockback stopped 18+ units short by the lane edge is a **wall slam**: 3% max HP and a 0.25s stun. Crash Test takes only 1%, is stunned for 0.5s, and staggers enemies within 70.
+- Size: Crash Test's token is larger (radius 21 vs 17).
+- Airborne heroes are skipped by targeting, projectiles, fields, towers and damage.
 
 ## Items (14 + Empty)
 
@@ -58,4 +66,4 @@ Shared 18-point team budget; two distinct slots per hero.
 
 ## New CSV event kinds
 
-`stitch`, `stitch_mirror`, `ram_hit`, `ram_dodge`, `dash_miss` (also for Crash Test), `write_off_blast`, `cloak_reveal`, `cloak_gank_success`, `item_evolved`. Existing IDs, including `crown_*` for the Double Damage Idol, are unchanged.
+`stitch`, `stitch_mirror`, `full_send_launch`, `full_send_land` (`detail` = hit/miss, value = heroes hit), `crash_program_shockwave`, `knockback`, `wall_slam`, `flare_burst` (`detail` = hit/miss), `cloak_reveal`, `cloak_gank_success`, `item_evolved`. Answer "Where is Crash Test now?" with `full_send_*` positions, and "Do Sunday's slow attacks land?" with `projectile_hit`/`projectile_miss` plus `flare_burst`. Existing IDs, including `crown_*` for the Double Damage Idol, are unchanged.

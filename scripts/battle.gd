@@ -100,13 +100,16 @@ func make_unit(hero_name: String, team: int, portrait: String, pos: Vector2, hp:
 		"copy_until": 0.0, "cast_scale": 1.0, "swing": 0.0,
 		"larceny": [], "larceny_time": 0.0, "dash": {}, "damage_done": 0.0,
 		"healing_done": 0.0, "item_procs": 0, "last_attacker": -1,
-		"retreating": false, "write_off": 0.0, "write_off_scale": 1.0, "write_off_stored": 0.0, "rest": 0.0, "rest_source": -1,
+		"retreating": false, "ability2": 6.0, "stability": 5, "flight": {}, "safety": 0.0, "program": 0.0, "program_scale": 1.0, "program_cd": 0.0,
+		"warmth": 0.0, "warmth_tick": 0.0, "sun_center": Vector2.ZERO,
 		"last_hero_hit": -100.0, "item_progress": {}, "cloak_story": -100.0}
 	if Catalog.HEROES.has(portrait):
 		var data: Dictionary = Catalog.HEROES[portrait]
 		u.armor = data.armor
 		u.resolve = data.resolve
 		u.attack_interval = data.interval
+		u.stability = data.get("stability", 5)
+		u.radius = data.get("size", MapLayout.HERO_RADIUS)
 	units.append(u)
 	next_id += 1
 	return u
@@ -156,6 +159,7 @@ func step(dt: float = STEP) -> void:
 		update_ultimate(u, dt)
 		if u.hp <= 0:
 			if not u.creep:
+				u.flight.clear()
 				u.respawn -= dt
 				if u.respawn <= 0:
 					u.hp = u.max_hp
@@ -179,8 +183,12 @@ func step(dt: float = STEP) -> void:
 		update_effects(u, dt)
 		if u.hp <= 0:
 			continue
+		if not u.flight.is_empty():
+			Kits.update_flight(self, u, dt)
+			continue
 		u.cooldown -= dt
 		u.ability -= dt
+		u.ability2 -= dt
 		u.hop -= dt
 		u.flash = maxf(0, u.flash - dt)
 		u.shield_time -= dt
@@ -226,7 +234,7 @@ func step(dt: float = STEP) -> void:
 		var enemy := select_enemy(u)
 		if not u.creep:
 			use_abilities(u, enemy)
-			if u.charge > 0 or not u.dash.is_empty():
+			if u.charge > 0 or not u.dash.is_empty() or not u.flight.is_empty():
 				continue
 		if not enemy.is_empty():
 			var distance: float = u.pos.distance_to(enemy.pos)
@@ -264,7 +272,7 @@ func step(dt: float = STEP) -> void:
 			heal(u, u, 12.0 * dt)
 		# Small separation maintains readable tokens without physics-dependent outcomes.
 		for other in units:
-			if other.id <= u.id or other.hp <= 0:
+			if other.id <= u.id or other.hp <= 0 or not other.flight.is_empty():
 				continue
 			var gap: Vector2 = u.pos - other.pos
 			var minimum: float = u.radius + other.radius + 5.0
@@ -406,7 +414,7 @@ func update_towers(dt: float) -> void:
 		var target: Dictionary = {}
 		var best := INF
 		for u in units:
-			if u.team == tower.team or u.hp <= 0 or u.lane != tower.lane or u.invisible > 0:
+			if u.team == tower.team or u.hp <= 0 or u.lane != tower.lane or u.invisible > 0 or not u.flight.is_empty():
 				continue
 			var distance: float = tower.pos.distance_to(u.pos)
 			if distance > 180:
@@ -432,7 +440,7 @@ func select_enemy(u: Dictionary) -> Dictionary:
 	if siege_window and (clock >= 840 or u.behavior.siege == 5):
 		return {}
 	for enemy in units:
-		if enemy.team == u.team or enemy.hp <= 0 or enemy.lane != u.lane or enemy.invisible > 0:
+		if enemy.team == u.team or enemy.hp <= 0 or enemy.lane != u.lane or enemy.invisible > 0 or not enemy.flight.is_empty():
 			continue
 		if not MapLayout.on_lane(enemy.pos, u.lane):
 			continue
@@ -451,6 +459,8 @@ func select_enemy(u: Dictionary) -> Dictionary:
 		if u.team == 0 and plan == 2 and enemy.creep:
 			score -= 45
 		score += Kits.target_bias(self, u, enemy)
+		if not enemy.creep and in_sunlight(enemy, u.team):
+			score -= 40.0 # BEAUTIFUL DAY makes enemies easier to target.
 		if score < best_score:
 			best_score = score
 			best = enemy
@@ -459,6 +469,8 @@ func select_enemy(u: Dictionary) -> Dictionary:
 func use_abilities(u: Dictionary, enemy: Dictionary) -> void:
 	if u.ability <= 0:
 		Kits.signature(self, u, enemy)
+	if u.ability2 <= 0 and u.dash.is_empty() and u.flight.is_empty():
+		Kits.signature2(self, u, enemy)
 	if not enemy.is_empty() and not enemy.creep:
 		try_cloak(u, "approach", enemy)
 	if not u.dash.is_empty() or enemy.is_empty() or enemy.creep or u.pos.distance_to(enemy.pos) > 240:
@@ -528,22 +540,83 @@ func steal(u: Dictionary, enemy: Dictionary, grand: bool) -> void:
 func update_fields(dt: float) -> void:
 	for field in fields:
 		var owner := get_unit(field.source)
-		if owner.is_empty() or owner.hp <= 0:
+		# Moving gas ends with its owner; anchored fire and sunlight stay until they expire.
+		if owner.is_empty() or (owner.hp <= 0 and not field.anchored):
 			field.time = 0.0
 			continue
 		if not field.anchored:
 			field.pos = owner.pos
 		field.time -= dt
 		field.tick -= dt
-		if field.tick <= 0 and field.time > 0:
-			field.tick = 0.5
-			for target in units:
-				if target.team != field.team and target.hp > 0 and target.pos.distance_to(field.pos) < field.radius:
-					var before: float = target.hp
-					apply_damage(target, field.damage*crown_multiplier(owner), field.source, field.overload, "magic")
-					if field.overload:
-						heal(owner, owner, maxf(0,before-target.hp)*0.3)
+		if field.tick > 0 or field.time <= 0:
+			continue
+		field.tick = 0.5
+		for target in units:
+			if target.hp <= 0 or not target.flight.is_empty() or target.pos.distance_to(field.pos) >= field.radius:
+				continue
+			if target.team == field.team:
+				if field.kind == "sun" and not target.creep:
+					heal(owner, target, target.max_hp*0.015)
+				continue
+			if field.kind == "sun" and target.invisible > 0:
+				reveal(target, "sunlight")
+			var before: float = target.hp
+			apply_damage(target, field.damage*crown_multiplier(owner), field.source, field.overload, "magic")
+			if field.overload:
+				heal(owner, owner, maxf(0,before-target.hp)*0.3)
 	fields = fields.filter(func(field): return field.time > 0)
+
+func in_sunlight(target: Dictionary, sun_team: int) -> bool:
+	for field in fields:
+		if field.kind == "sun" and field.team == sun_team and target.pos.distance_to(field.pos) < field.radius:
+			return true
+	return false
+
+## True when an enemy hero is currently trading blows with a hero of `team`.
+func fighting_team(enemy: Dictionary, team: int) -> bool:
+	var attacker := get_unit(enemy.last_attacker)
+	if not attacker.is_empty() and attacker.team == team and not attacker.creep and clock-enemy.last_hit < 3.0:
+		return true
+	for ally in units:
+		if ally.team == team and not ally.creep and ally.hp > 0 and ally.last_attacker == enemy.id and clock-ally.last_hit < 3.0:
+			return true
+	return false
+
+## Pushes a unit away from origin, scaled by Stability. Being stopped by the
+## lane edge counts as a wall collision.
+func knockback(target: Dictionary, origin: Vector2, distance: float, source_id: int) -> void:
+	if target.hp <= 0 or not target.flight.is_empty() or intermission.time > 0:
+		return
+	var push: float = distance*(Kits.knockback_scale(self, target) if not target.creep else 1.0)
+	if push < 1.0:
+		return
+	var direction: Vector2 = origin.direction_to(target.pos)
+	if direction == Vector2.ZERO:
+		direction = MapLayout.forward(target.pos, target.lane, 1-target.team)
+	var wanted: Vector2 = target.pos+direction*push
+	var landed: Vector2 = MapLayout.constrain(wanted, target.lane)
+	target.pos = landed
+	if target.creep:
+		return
+	record_event("knockback", source_id, target.id, push)
+	Kits.on_displaced(self, target, push, "knockback")
+	var blocked: float = wanted.distance_to(landed)
+	if blocked >= 18.0:
+		wall_slam(target, source_id, blocked)
+
+func wall_slam(target: Dictionary, source_id: int, force: float) -> void:
+	var sturdy: bool = Kits.built_for_crashes(self, target)
+	var damage: float = target.max_hp*(0.01 if sturdy else 0.03)
+	record_event("wall_slam", source_id, target.id, force)
+	if sturdy or force >= 30.0:
+		log_event("WALL SLAM", target.name + " hits the wall.", "wall_slam", target.id)
+	apply_damage(target, damage, source_id, false, "collision")
+	target.stun = maxf(target.stun, 0.5 if sturdy else 0.25)
+	if sturdy:
+		for enemy in units:
+			if enemy.team != target.team and not enemy.creep and enemy.hp > 0 and enemy.pos.distance_to(target.pos) < 70:
+				stagger(enemy, 0.4)
+	Kits.on_displaced(self, target, force, "wall hit")
 
 func fire(u: Dictionary, enemy: Dictionary, damage: float, ultimate: bool) -> void:
 	if intermission.time > 0 or u.hp <= 0:
@@ -561,14 +634,30 @@ func fire(u: Dictionary, enemy: Dictionary, damage: float, ultimate: bool) -> vo
 		record_event("melee_windup", u.id, enemy.id, base)
 		return
 	record_event("projectile_fired", u.id, enemy.id, base, {"ability": u.cast_effect if ultimate else "attack"})
-	launch(u, u.pos.direction_to(enemy.pos), base, 520.0 if ultimate else data.get("projectile", 390.0), ultimate)
+	var shot := launch(u, u.pos.direction_to(enemy.pos), base, 520.0 if ultimate else data.get("projectile", 390.0), ultimate)
+	if not ultimate:
+		shot.life = data.get("shot_life", 1.2)
+		shot.splash = data.get("splash", 0.0)
 
 ## Projectiles fly straight and can miss; ultimate shots have a slightly wider hitbox.
-func launch(u: Dictionary, direction: Vector2, damage: float, speed: float, ultimate: bool = true) -> void:
-	shots.append({"pos":u.pos+direction*(u.radius+2), "direction":direction,
+func launch(u: Dictionary, direction: Vector2, damage: float, speed: float, ultimate: bool = true) -> Dictionary:
+	var shot := {"pos":u.pos+direction*(u.radius+2), "direction":direction,
 		"team":u.team,"source":u.id,"damage":damage,"ultimate":ultimate,
-		"life":1.2,"speed":speed})
+		"life":1.2,"speed":speed,"kind":"bolt","splash":0.0,"knock":0.0,"explode_on_expire":false}
+	shots.append(shot)
 	u.flash = 0.15
+	return shot
+
+## Sunday's Flare: a huge, very slow orb that bursts where the target stood,
+## or earlier if someone walks into it.
+func launch_orb(u: Dictionary, target_pos: Vector2, damage: float) -> void:
+	var shot := launch(u, u.pos.direction_to(target_pos), damage, 95.0)
+	shot.kind = "orb"
+	shot.splash = 80.0
+	shot.knock = 45.0
+	shot.explode_on_expire = true
+	shot.life = maxf(0.3, (u.pos.distance_to(target_pos)-u.radius-2)/95.0)
+	record_event("projectile_fired", u.id, -1, damage, {"ability": "Flare"})
 
 func update_shots(dt: float) -> void:
 	for shot in shots:
@@ -578,25 +667,53 @@ func update_shots(dt: float) -> void:
 		var victim: Dictionary = {}
 		var nearest := INF
 		for u in units:
-			if u.team == shot.team or u.hp <= 0:
+			if u.team == shot.team or u.hp <= 0 or not u.flight.is_empty():
 				continue
 			var point := Geometry2D.get_closest_point_to_segment(u.pos, before, shot.pos)
-			var radius: float = u.radius
+			var radius: float = u.radius + (16.0 if shot.kind == "orb" else 0.0)
 			if point.distance_to(u.pos) < radius + (8 if shot.ultimate else 3):
 				var distance: float = before.distance_to(point)
 				if distance < nearest:
 					nearest = distance
 					victim = u
 		if not victim.is_empty():
-			record_event("projectile_hit", shot.source, victim.id, shot.damage)
-			apply_damage(victim, shot.damage, shot.source, shot.ultimate, "ability" if shot.ultimate else "basic")
+			record_event("projectile_hit", shot.source, victim.id, shot.damage, {"ability": "Flare" if shot.kind == "orb" else ""})
+			if shot.kind != "orb":
+				apply_damage(victim, shot.damage, shot.source, shot.ultimate, "ability" if shot.ultimate else "basic")
+			if shot.splash > 0:
+				explode(shot, victim.pos, victim.id)
 			shot.life = 0
 		elif shot.life <= 0:
-			record_event("projectile_miss", shot.source)
+			if shot.explode_on_expire:
+				explode(shot, shot.pos, -1)
+			else:
+				record_event("projectile_miss", shot.source)
 	shots = shots.filter(func(s): return s.life > 0)
 
+## Splash on impact. Orbs (Flare) deal full damage in the whole radius, knock back
+## and leave a brief burn; Sunbeam splash deals half damage around the victim.
+func explode(shot: Dictionary, center: Vector2, victim_id: int) -> void:
+	var owner := get_unit(shot.source)
+	var hits := 0
+	for target in units:
+		if target.team == shot.team or target.hp <= 0 or not target.flight.is_empty() or target.pos.distance_to(center) > shot.splash:
+			continue
+		if shot.kind == "orb":
+			apply_damage(target, shot.damage, shot.source, false, "ability")
+			if shot.knock > 0:
+				knockback(target, center, shot.knock, shot.source)
+		elif target.id != victim_id:
+			apply_damage(target, shot.damage*0.5, shot.source, false, "splash")
+		if not target.creep:
+			hits += 1
+	if shot.kind == "orb":
+		record_event("flare_burst", shot.source, victim_id, hits, {"ability": "Flare", "detail": "hit" if hits > 0 else "miss"})
+		if not owner.is_empty():
+			fields.append({"kind": "fire", "anchored": true, "pos": center, "source": shot.source, "team": shot.team, "time": 2.0,
+				"tick": 0.0, "radius": 55.0, "overload": false, "damage": 6.0+owner.level})
+
 func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: bool = false, kind: String = "ability", transferred: bool = false, lucky: bool = false) -> void:
-	if target.hp <= 0 or intermission.time > 0:
+	if target.hp <= 0 or intermission.time > 0 or not target.flight.is_empty():
 		return
 	var attacker := get_unit(source_id)
 	if not transferred and not attacker.is_empty() and attacker.team != target.team:
@@ -632,7 +749,7 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 				apply_damage(ally, share, source_id, ultimate, kind, true)
 				record_event("damage_intercepted", ally.id, target.id, share)
 				break
-	var defense: float = target.resolve if kind in ["magic", "ability"] else target.armor
+	var defense: float = target.resolve + Kits.resolve_bonus(self, target) if kind in ["magic", "ability", "splash"] else target.armor + Kits.armor_bonus(self, target)
 	if has_item(target,"glass"):
 		defense -= 25
 	if has_item(target,"revenge") and source_id in target.revenge_targets:
@@ -794,7 +911,7 @@ func duel_move(u: Dictionary, enemy: Dictionary, dt: float) -> void:
 	var away: Vector2 = enemy.pos.direction_to(u.pos)
 	if away == Vector2.ZERO:
 		away = MapLayout.forward(u.pos, u.lane, u.team)
-	var desired: float = maxf(u.radius+enemy.radius+8, u.reach*0.78)
+	var desired: float = maxf(u.radius+enemy.radius+8, u.reach*Kits.preferred_range(self, u))
 	var gap: float = u.pos.distance_to(enemy.pos)
 	var radial := clampf((desired-gap)/45.0, -0.6, 0.8)
 	var motion: Vector2 = away.orthogonal()*u.orbit_sign + away*radial
@@ -940,7 +1057,7 @@ func attack_interval(u: Dictionary) -> float:
 	return u.attack_interval/(1.65 if u.blood_rush > 0 else 1.0)
 
 func movement_speed(u: Dictionary, destination: Vector2) -> float:
-	var value: float = u.speed*(1.35 if u.blood_rush > 0 else 1.0)*(0.2 if u.hold_line > 0 else 1.0)*(1.2 if u.rest > 0 else 1.0)
+	var value: float = u.speed*(1.35 if u.blood_rush > 0 else 1.0)*(0.2 if u.hold_line > 0 else 1.0)*Kits.speed_scale(self, u)
 	if u.sole_time > 0:
 		value *= 1.55 if is_evolved(u, "sole") else 1.4
 	if has_item(u,"coward") and u.hp/u.max_hp < 0.3:
