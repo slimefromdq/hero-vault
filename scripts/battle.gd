@@ -36,6 +36,11 @@ var next_id := 0
 var kills := [0, 0]
 var overtime := false
 var mirroring := false # Guards Poppet damage mirroring from recursing.
+# Presentation and analytics only: nothing below feeds back into combat or RNG.
+var damage_label := "" # Callers may name the ability just before apply_damage.
+var damage_ledger := {} # Hero target id -> "source|ability" -> totals (see ledger_add).
+var popups: Array = [] # Floating combat text, trimmed to POPUP_SECONDS.
+const POPUP_SECONDS := 1.3
 
 func setup(seed_value: int, team_plan: int, hero_assignment: int, rival: int, team: Array = Catalog.DEFAULT_TEAM, equipment: Array = Catalog.DEFAULT_ITEMS, orders: Array = [0, 0, 1, 1, 2]) -> void:
 	if Catalog.validate(team, equipment) != "" or orders.size() != 5:
@@ -424,6 +429,7 @@ func update_towers(dt: float) -> void:
 				best = priority
 				target = u
 		if not target.is_empty():
+			damage_label = "Tower shot"
 			apply_damage(target, 23, -1)
 			tower.cooldown = 1.4
 			tower.flash = 0.2
@@ -506,10 +512,12 @@ func resolve_ultimate(u: Dictionary, _enemy: Dictionary) -> void:
 	Kits.resolve(self, u, effect, damage)
 	log_event(data.id, u.name + " releases " + data.id + ".", "ultimate_release", u.id)
 
-func area_hit(u: Dictionary, position: Vector2, radius: float, damage: float) -> void:
+func area_hit(u: Dictionary, position: Vector2, radius: float, damage: float, label: String = "") -> void:
 	for target in units:
 		if target.team != u.team and target.hp > 0 and target.pos.distance_to(position) < radius:
+			damage_label = label
 			apply_damage(target, damage*crown_multiplier(u), u.id, false, "ability")
+	damage_label = ""
 	u.flash = 0.3
 
 func heal(source: Dictionary, target: Dictionary, amount: float, redirect: bool = true) -> void:
@@ -531,6 +539,8 @@ func heal(source: Dictionary, target: Dictionary, amount: float, redirect: bool 
 	source.healing_done += target.hp-before
 	if target.hp > before:
 		record_event("heal", source.id, target.id, target.hp-before)
+		if not target.creep:
+			add_popup(target.pos, "heal", target.hp-before, target.team)
 	if before/target.max_hp < 0.2 and target.hp/target.max_hp >= 0.2:
 		log_event("BACK FROM THE BRINK", target.name + " steals another chance to survive.", "clutch", target.id)
 
@@ -561,6 +571,7 @@ func update_fields(dt: float) -> void:
 			if field.kind == "sun" and target.invisible > 0:
 				reveal(target, "sunlight")
 			var before: float = target.hp
+			damage_label = {"gas": "Toxic gas", "fire": "Burning ground", "sun": "BEAUTIFUL DAY"}.get(field.kind, "Field")
 			apply_damage(target, field.damage*crown_multiplier(owner), field.source, field.overload, "magic")
 			if field.overload:
 				heal(owner, owner, maxf(0,before-target.hp)*0.3)
@@ -610,6 +621,7 @@ func wall_slam(target: Dictionary, source_id: int, force: float) -> void:
 	record_event("wall_slam", source_id, target.id, force)
 	if sturdy or force >= 30.0:
 		log_event("WALL SLAM", target.name + " hits the wall.", "wall_slam", target.id)
+	damage_label = "Wall slam"
 	apply_damage(target, damage, source_id, false, "collision")
 	target.stun = maxf(target.stun, 0.5 if sturdy else 0.25)
 	if sturdy:
@@ -630,11 +642,13 @@ func fire(u: Dictionary, enemy: Dictionary, damage: float, ultimate: bool) -> vo
 	var data: Dictionary = Catalog.HEROES.get(u.portrait, {})
 	if not ultimate and not u.creep and data.get("projectile",0.0) == 0:
 		u.swing = data.windup
-		melee_swings.append({"source":u.id,"target":enemy.id,"time":u.swing,"damage":base,"angle":u.pos.angle_to_point(enemy.pos)})
+		melee_swings.append({"source":u.id,"target":enemy.id,"time":u.swing,"total":u.swing,"damage":base,"angle":u.pos.angle_to_point(enemy.pos),"reach":u.reach,"team":u.team})
 		record_event("melee_windup", u.id, enemy.id, base)
 		return
 	record_event("projectile_fired", u.id, enemy.id, base, {"ability": u.cast_effect if ultimate else "attack"})
 	var shot := launch(u, u.pos.direction_to(enemy.pos), base, 520.0 if ultimate else data.get("projectile", 390.0), ultimate)
+	if ultimate and Catalog.ULTIMATES.has(u.cast_effect):
+		shot["label"] = Catalog.ULTIMATES[u.cast_effect].id
 	if not ultimate:
 		shot.life = data.get("shot_life", 1.2)
 		shot.splash = data.get("splash", 0.0)
@@ -679,6 +693,7 @@ func update_shots(dt: float) -> void:
 		if not victim.is_empty():
 			record_event("projectile_hit", shot.source, victim.id, shot.damage, {"ability": "Flare" if shot.kind == "orb" else ""})
 			if shot.kind != "orb":
+				damage_label = shot.get("label", "")
 				apply_damage(victim, shot.damage, shot.source, shot.ultimate, "ability" if shot.ultimate else "basic")
 			if shot.splash > 0:
 				explode(shot, victim.pos, victim.id)
@@ -688,6 +703,8 @@ func update_shots(dt: float) -> void:
 				explode(shot, shot.pos, -1)
 			else:
 				record_event("projectile_miss", shot.source)
+				if not get_unit(shot.source).get("creep", true):
+					add_popup(shot.pos, "miss", 0.0, shot.team)
 	shots = shots.filter(func(s): return s.life > 0)
 
 ## Splash on impact. Orbs (Flare) deal full damage in the whole radius, knock back
@@ -699,10 +716,12 @@ func explode(shot: Dictionary, center: Vector2, victim_id: int) -> void:
 		if target.team == shot.team or target.hp <= 0 or not target.flight.is_empty() or target.pos.distance_to(center) > shot.splash:
 			continue
 		if shot.kind == "orb":
+			damage_label = "Flare"
 			apply_damage(target, shot.damage, shot.source, false, "ability")
 			if shot.knock > 0:
 				knockback(target, center, shot.knock, shot.source)
 		elif target.id != victim_id:
+			damage_label = "Splash"
 			apply_damage(target, shot.damage*0.5, shot.source, false, "splash")
 		if not target.creep:
 			hits += 1
@@ -713,9 +732,15 @@ func explode(shot: Dictionary, center: Vector2, victim_id: int) -> void:
 				"tick": 0.0, "radius": 55.0, "overload": false, "damage": 6.0+owner.level})
 
 func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: bool = false, kind: String = "ability", transferred: bool = false, lucky: bool = false) -> void:
+	var attacker := get_unit(source_id)
+	var label := damage_source_name(attacker, source_id, kind, ultimate)
+	damage_label = ""
 	if target.hp <= 0 or intermission.time > 0 or not target.flight.is_empty():
 		return
-	var attacker := get_unit(source_id)
+	var raw := amount
+	var crit := false
+	var intercepted := 0.0
+	var guarded := 0.0
 	if not transferred and not attacker.is_empty() and attacker.team != target.team:
 		if has_item(attacker, "execution") and not target.creep and target.hp/target.max_hp < (0.3 if is_evolved(attacker, "execution") else 0.2):
 			amount *= 1.6
@@ -733,6 +758,7 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 					advance_item(attacker, "first_hit", 1)
 			if lucky or (kind == "basic" and has_item(attacker,"coin") and rng.randf() < coin_chance(attacker)):
 				amount *= 3.0
+				crit = true
 				item_event(attacker, "coin", target.id, amount)
 		if not target.creep and not attacker.creep:
 			attacker.encounters[target.id] = clock
@@ -746,6 +772,8 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 			if ally.id != target.id and ally.hp > 0 and ally.team == target.team and ally.hold_line > 0 and can_protect(ally,target) and ally.pos.distance_to(target.pos) < 140:
 				var share: float = amount*0.35
 				amount -= share
+				intercepted = share
+				damage_label = "Hold the Line (covering %s): %s" % [target.name, label]
 				apply_damage(ally, share, source_id, ultimate, kind, true)
 				record_event("damage_intercepted", ally.id, target.id, share)
 				break
@@ -758,12 +786,16 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 		defense += 65
 	if target.hold_line > 0:
 		defense += 100
+	var boosted := amount+intercepted # After item bonuses, before any protection.
+	var pre_defense := amount
 	amount *= 100.0/(100.0+defense) if defense >= 0 else 2.0-100.0/(100.0-defense)
+	var mitigated := pre_defense-amount # Negative when defense is below zero (Glass Cannon).
 	if has_item(target,"bodyguard"):
 		for ally in units:
 			if ally.id != target.id and not ally.creep and ally.hp > 0 and ally.team == target.team and ally.hp < target.hp and ally.pos.distance_to(target.pos) < 120:
 				var reduction: float = 0.35 if is_evolved(target, "bodyguard") else 0.25
 				advance_item(target, "bodyguard", amount*reduction)
+				guarded = amount*reduction
 				amount *= 1.0-reduction
 				break
 	check_last_stand(target)
@@ -779,7 +811,15 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 	var hp_before: float = target.hp
 	target.hp = maxf(0, target.hp-amount)
 	var actual: float = hp_before-target.hp
-	record_event("damage", source_id, target.id, actual, {"damage_type":kind,"absorbed":absorbed})
+	var overkill: float = amount-actual
+	record_event("damage", source_id, target.id, actual, {"damage_type":kind,"absorbed":absorbed,"ability":label,
+		"raw_damage":raw,"boosted_damage":boosted,"crit":crit,"intercepted":intercepted,"defense":defense,
+		"mitigated":mitigated,"bodyguard":guarded,"overkill":overkill,"transferred":transferred})
+	target["hurt_at"] = clock
+	if not target.creep:
+		ledger_add(target, attacker, source_id, label, {"hits": 1, "crits": int(crit), "raw": raw, "boosted": boosted,
+			"intercepted": intercepted, "mitigated": mitigated, "bodyguard": guarded, "absorbed": absorbed, "overkill": overkill, "taken": actual})
+		add_popup(target.pos, kind, actual, target.team, absorbed, crit)
 	if not target.creep:
 		Kits.on_damaged(self, target, actual, absorbed, source_id)
 		check_ambush(target, actual)
@@ -887,6 +927,7 @@ func farm_camp(u: Dictionary, dt: float) -> bool:
 			log_event("CAMP CLEARED", u.name + " gains 6 XP and 45s of " + ("+20% attack damage." if camp.kind == "power" else "+3 health per second."), "jungle", u.id)
 			return true
 	if camp.cooldown <= 0:
+		damage_label = "Jungle guardian"
 		apply_damage(u, 9.0, -2)
 		camp.cooldown = 1.5
 	return true
@@ -896,13 +937,13 @@ func log_event(title: String, detail: String, kind: String, actor: int = -1) -> 
 	events.append({"time": clock, "title": title, "detail": detail, "kind": kind, "actor": actor})
 
 func snapshot() -> void:
-	history.append({"time": clock, "units": units.duplicate(true), "shots": shots.duplicate(true), "vaults": vaults.duplicate(), "winner": winner, "kills": kills.duplicate(), "towers": towers.duplicate(true), "camps": camps.duplicate(true), "crown": crown.duplicate(true), "fields": fields.duplicate(true), "thefts":thefts.duplicate(true), "intermission":intermission.duplicate(true)})
+	history.append({"time": clock, "units": units.duplicate(true), "shots": shots.duplicate(true), "vaults": vaults.duplicate(), "winner": winner, "kills": kills.duplicate(), "towers": towers.duplicate(true), "camps": camps.duplicate(true), "crown": crown.duplicate(true), "fields": fields.duplicate(true), "thefts":thefts.duplicate(true), "intermission":intermission.duplicate(true), "popups":popups.duplicate(true), "swings":melee_swings.duplicate(true)})
 	# About 30 seconds of replay, bounded even during long battles.
 	if history.size() > 210:
 		history.pop_front()
 
 func frame() -> Dictionary:
-	return {"time": clock, "units": units, "shots": shots, "vaults": vaults, "winner": winner, "kills": kills, "towers": towers, "camps": camps, "crown": crown, "fields": fields, "thefts":thefts, "intermission":intermission}
+	return {"time": clock, "units": units, "shots": shots, "vaults": vaults, "winner": winner, "kills": kills, "towers": towers, "camps": camps, "crown": crown, "fields": fields, "thefts":thefts, "intermission":intermission, "popups":popups, "swings":melee_swings}
 
 func duel_move(u: Dictionary, enemy: Dictionary, dt: float) -> void:
 	if Kits.holds_ground(self, u):
@@ -973,6 +1014,82 @@ func record_event(kind: String, actor: int = -1, target: int = -1, value: float 
 	row.merge(extra, true)
 	records.append(row)
 
+## Names what dealt damage for the breakdown panel and CSV `ability` column.
+func damage_source_name(attacker: Dictionary, source_id: int, kind: String, ultimate: bool) -> String:
+	if not damage_label.is_empty():
+		return damage_label
+	if source_id == -1:
+		return "Tower shot"
+	if source_id == -2:
+		return "Jungle guardian"
+	match kind:
+		"basic", "melee_basic":
+			return "Basic attack"
+		"splash":
+			return "Splash"
+		"collision":
+			return "Wall slam"
+	if ultimate and not attacker.is_empty():
+		var effect: String = attacker.get("cast_effect", "")
+		if Catalog.ULTIMATES.has(effect):
+			return Catalog.ULTIMATES[effect].id
+	return "Ability"
+
+static func source_title(attacker: Dictionary, source_id: int) -> String:
+	if source_id == -1:
+		return "Tower"
+	if source_id == -2:
+		return "Jungle"
+	if attacker.is_empty():
+		return "Unknown"
+	return "Minion" if attacker.creep else attacker.name
+
+func ledger_add(target: Dictionary, attacker: Dictionary, source_id: int, label: String, values: Dictionary) -> void:
+	var rows: Dictionary = damage_ledger.get(target.id, {})
+	var key := "%d|%s" % [source_id if attacker.is_empty() or not attacker.creep else -3, label]
+	if not rows.has(key):
+		rows[key] = {"source": source_title(attacker, source_id), "source_id": source_id,
+			"source_team": attacker.get("team", -1), "ability": label, "hits": 0, "crits": 0, "raw": 0.0, "boosted": 0.0,
+			"intercepted": 0.0, "mitigated": 0.0, "bodyguard": 0.0, "absorbed": 0.0, "overkill": 0.0, "taken": 0.0}
+	for field in values:
+		rows[key][field] += values[field]
+	damage_ledger[target.id] = rows
+
+## Sorted breakdown for one hero: rows of damage taken, biggest first.
+func damage_taken(target_id: int) -> Array:
+	var rows: Array = damage_ledger.get(target_id, {}).values()
+	rows.sort_custom(func(a, b): return a.raw > b.raw)
+	return rows
+
+## Sums every hero's damage taken that came from this unit.
+func damage_dealt(source_id: int) -> Array:
+	var merged := {}
+	for target_id in damage_ledger:
+		var victim := get_unit(target_id)
+		for row in damage_ledger[target_id].values():
+			if row.source_id != source_id:
+				continue
+			var key: String = row.ability + "|" + victim.name
+			if not merged.has(key):
+				merged[key] = {"target": victim.name, "ability": row.ability, "hits": 0, "raw": 0.0, "taken": 0.0}
+			merged[key].hits += row.hits
+			merged[key].raw += row.raw
+			merged[key].taken += row.taken
+	var rows: Array = merged.values()
+	rows.sort_custom(func(a, b): return a.taken > b.taken)
+	return rows
+
+func add_popup(pos: Vector2, kind: String, amount: float, team: int, absorbed: float = 0.0, crit: bool = false) -> void:
+	if kind != "miss" and kind != "heal" and amount < 0.5 and absorbed < 0.5:
+		return
+	popups = popups.filter(func(p): return clock-p.time < POPUP_SECONDS)
+	# Stack popups that land on the same spot in the same instant.
+	var lift := 0
+	for p in popups:
+		if clock-p.time < 0.25 and p.pos.distance_to(pos) < 20:
+			lift += 1
+	popups.append({"time": clock, "pos": pos, "kind": kind, "amount": amount, "absorbed": absorbed, "crit": crit, "team": team, "lift": mini(lift, 4)})
+
 func crown_multiplier(u: Dictionary) -> float:
 	return 2.0 if crown.holder == u.id else 1.0
 
@@ -1013,7 +1130,8 @@ func export_csv(path: String) -> Error:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
-	var columns := PackedStringArray(["match_id", "time", "kind", "actor", "target", "value", "x", "y", "ability", "next_available", "held_seconds", "detail", "actor_hero", "actor_team", "actor_level", "target_hero", "reason", "item", "damage_type", "absorbed"])
+	var columns := PackedStringArray(["match_id", "time", "kind", "actor", "target", "value", "x", "y", "ability", "next_available", "held_seconds", "detail", "actor_hero", "actor_team", "actor_level", "target_hero", "reason", "item", "damage_type", "absorbed",
+		"raw_damage", "boosted_damage", "crit", "intercepted", "defense", "mitigated", "bodyguard", "overkill", "transferred"])
 	file.store_csv_line(columns)
 	for row in records:
 		var cells := PackedStringArray()
@@ -1223,5 +1341,7 @@ func update_melee(dt: float) -> void:
 			hit = true
 		if not hit:
 			record_event("melee_miss",u.id,swing.target)
+			var aimed := get_unit(swing.target)
+			add_popup(aimed.pos if not aimed.is_empty() else u.pos, "miss", 0.0, u.team)
 		u.flash = 0.18
 	melee_swings = melee_swings.filter(func(swing): return swing.time > 0)

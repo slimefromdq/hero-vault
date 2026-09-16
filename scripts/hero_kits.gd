@@ -41,7 +41,7 @@ static func signature(b, u: Dictionary, enemy: Dictionary) -> void:
 				u.ability = 12
 		"colony":
 			if distance < 105:
-				b.area_hit(u, u.pos, 80+u.radius, 38+u.level*5)
+				b.area_hit(u, u.pos, 80+u.radius, 38+u.level*5, "Area slam")
 				u.ability = 10
 		"poppet":
 			if hero_enemy and distance < 220 and enemy.curse <= 0:
@@ -136,7 +136,7 @@ static func resolve(b, u: Dictionary, effect: String, damage: float) -> void:
 					u.larceny.append(target.id)
 			u.larceny_time = 2.5*u.cast_scale
 		"colony":
-			b.area_hit(u, u.pos, 140+u.radius, damage)
+			b.area_hit(u, u.pos, 140+u.radius, damage, Catalog.ULTIMATES["colony"].id)
 			b.grant_shield(u, u, 100*u.cast_scale, 4)
 		"poppet":
 			var target: Dictionary = b.get_unit(u.charge_target)
@@ -150,7 +150,7 @@ static func resolve(b, u: Dictionary, effect: String, damage: float) -> void:
 		"kiln":
 			var target: Dictionary = b.get_unit(u.charge_target)
 			var center: Vector2 = u.pos if target.is_empty() else u.pos.move_toward(target.pos, 90)
-			b.area_hit(u, center, 110, damage)
+			b.area_hit(u, center, 110, damage, Catalog.ULTIMATES["kiln"].id)
 			start_fire(b, u, center, 110.0, 5.0, (10.0+u.level*1.4)*u.cast_scale)
 		"sunday":
 			var center: Vector2 = u.sun_center if u.sun_center != Vector2.ZERO else u.pos
@@ -228,6 +228,7 @@ static func on_damaged(b, target: Dictionary, actual: float, _absorbed: float, _
 	b.mirroring = true
 	for bound in b.units:
 		if bound.curse > 0 and bound.curse_source == target.id and bound.hp > 0 and bound.team != target.team:
+			b.damage_label = "Stitch mirror"
 			b.apply_damage(bound, actual*0.35, target.id, false, "magic", true)
 			b.record_event("stitch_mirror", target.id, bound.id, actual*0.35, {"damage_type": "magic"})
 	b.mirroring = false
@@ -275,7 +276,7 @@ static func on_displaced(b, u: Dictionary, amount: float, cause: String) -> void
 	var damage: float = (data.damage+data.per_level*u.level)*u.program_scale
 	b.record_event("crash_program_shockwave", u.id, -1, damage, {"ability": data.id, "detail": cause})
 	b.log_event("BOOM", u.name + " turns a " + cause + " into a shockwave.", "shockwave", u.id)
-	b.area_hit(u, u.pos, 90, damage)
+	b.area_hit(u, u.pos, 90, damage, "CRASH PROGRAM shockwave")
 
 static func count_heroes(b, position: Vector2, radius: float, team: int) -> int:
 	var total := 0
@@ -368,6 +369,7 @@ static func update_flight(b, u: Dictionary, dt: float) -> void:
 		if not enemy.creep:
 			hits += 1
 		var close: bool = enemy.pos.distance_to(u.pos) < 35
+		b.damage_label = "FULL SEND landing"
 		b.apply_damage(enemy, damage, u.id, false, "ability")
 		b.knockback(enemy, u.pos, push, u.id)
 		if close:
@@ -400,6 +402,7 @@ static func update_dash(b, u: Dictionary, dt: float) -> void:
 	u.intent = "Leeching Cut" if action.kind == "leech" else "Intercede"
 	if u.pos.distance_to(target.pos) < u.radius+target.radius+15:
 		if action.kind == "leech":
+			b.damage_label = "Leeching Cut"
 			b.apply_damage(target, (45+u.level*3)*b.crown_multiplier(u), u.id, false, "ability")
 			if target.hp > 0:
 				var amount: float = target.max_hp*0.12
@@ -451,6 +454,7 @@ static func update_larceny(b, u: Dictionary, dt: float) -> void:
 	u.intent = "Grand Larceny / next pocket"
 	if target.pos.distance_to(u.pos) < u.reach+target.radius+10:
 		steal(b, u, target, true)
+		b.damage_label = "Grand Larceny"
 		b.apply_damage(target, (45+u.level*4)*u.cast_scale*b.crown_multiplier(u), u.id, false, "ability")
 		u.larceny.pop_front()
 

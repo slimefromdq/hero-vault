@@ -113,7 +113,7 @@ Replace placeholders after repo inspection.
 ./play.ps1
 # Run each test with an isolated user-data directory (APPDATA/LOCALAPPDATA on Windows, HOME on Linux):
 godot --headless --path . --script res://tests/roster_items_test.gd
-# Other headless checks: rework, battle, navigation, map, duel, jungle, handoff, session, expression, expression_editor.
+# Other headless checks: rework, battle, navigation, map, duel, jungle, handoff, session, expression, expression_editor, clarity.
 # display_test.gd needs a real display (xvfb-run works on Linux). No formatter/linter is configured.
 # Balance snapshot over random squads:
 N=45 godot --headless --path . --script res://tools/balance_probe.gd
@@ -419,32 +419,34 @@ Never leave the next agent with “continue where I left off” and no coordinat
 ## 13. Session Handoff
 
 ### Current objective
-Rebuild Crash Test and Sunday from the user's design sheets (2026-09-16). This builds on the earlier session that added four heroes, five items and item evolution, and removed Atlas.
+Visual clarity pass (2026-09-16): floating damage numbers, a damage breakdown (in game and in the CSV), clearer telegraphs and status icons, a more detailed map and jungle, and the Irene expression sheet. Builds on the Crash Test/Sunday rebuild on `new-heroes-and-items`.
 
 ### What changed
-- **Crash Test:** Impact Test knockback punch; FULL SEND ballistic launch (`flight` state, lane change on landing, can miss); SAFETY RATING: ZERO; CRASH PROGRAM shockwaves on displacement. Stats and AI follow the sheet. Replaced the earlier charge/Write-Off kit.
-- **Sunday:** slow splash Sunbeam; Warmth aura with walk-to-ally AI (dash kind `walk`); Flare slow orb (`battle.launch_orb`, `explode`); BEAUTIFUL DAY `sun` field. Replaced Day of Rest/Sunday Best.
-- **New shared systems in `battle.gd`:** `knockback` scaled by the Stability stat, `wall_slam`, a second ability timer (`ability2`, `Kits.signature2`), `fighting_team`, `in_sunlight`. Heroes have `stability` and an optional `size`. Anchored fields (fire, sun) now outlive their owner. Eleanor's Intercede push uses `knockback`.
-- **Earlier session (same branch):** Poppet, Kiln, five items, burst item evolution, `hero_kits.gd` split, save migration, launcher/docs/asset cleanup.
+- **`battle.gd`:** `apply_damage` records every step (raw, boosted, crit, intercepted, defense/mitigated, Bodyguard, absorbed, overkill, ability) into the `damage` row, `damage_ledger`, and `popups`. `damage_label` names the source ability for one hit. Heals and misses add popups. `melee_swings` carry `total`/`reach`/`team`. Snapshots and frames now include `popups` and `swings`. There are new CSV columns. No combat or RNG change: the seed probe matches exactly.
+- **`hero_kits.gd`:** labels for Area slam, All Together, Open the Door, Stitch mirror, CRASH PROGRAM shockwave, FULL SEND landing, Leeching Cut and Grand Larceny.
+- **`battle_view.gd`:** popups, swing wedges, dash lines, ultimate name while charging, projectile tails, hit flash, stun stars, status pills, and redrawn terrain, jungle and camps.
+- **`app_shell.gd`:** Damage breakdown overlay (button or **D**) and a `--breakdown` capture flag.
+- **`expressions.gd`:** Irene sheet registered. Built-in sheets may set `xs`/`width`/`mask: "ellipse"`.
+- **Earlier sessions (same branch):** Crash Test/Sunday rebuild; Poppet, Kiln, items, evolution.
 
 ### Files changed
-- `scripts/catalog.gd`, `scripts/hero_kits.gd`, `scripts/battle.gd`, `scripts/battle_view.gd`
-- `tests/roster_items_test.gd`
-- `docs/CONTENT.md`, `README.md`, `heroes.md`, `systems.md`, `roadmap.md`, `AGENTS.md`
+- `scripts/battle.gd`, `scripts/hero_kits.gd`, `scripts/battle_view.gd`, `scripts/app_shell.gd`, `scripts/expressions.gd`
+- `assets/irene-expressions.png` (+ `.import`)
+- `tests/clarity_test.gd`
+- `docs/VISUAL_CLARITY.md`, `docs/CONTENT.md`, `docs/EXPRESSIONS.md`, `AGENTS.md`
 
 ### Validation run
-- Godot 4.7.2 headless: roster_items, rework, battle (nine full matches), navigation, map, duel, jungle, handoff, session, expression and expression_editor all pass.
-- Event probe over six matches: FULL SEND missed 20 of 111 landings; Flare missed 17 of 134 bursts. Wall slams and CRASH PROGRAM shockwaves occur.
-- Balance probe (45 squads): win rates 0.38–0.66; Crash Test 0.39, Sunday 0.38, Irene 0.66.
-- Screenshots under xvfb show the FULL SEND arc/landing marker, the Flare orb and the BEAUTIFUL DAY zone. display_test hangs under xvfb without a window manager, on the original code too.
+- Godot 4.7.2 headless: roster_items, rework, battle, navigation, map, duel, jungle, handoff, session, expression (now includes Irene's 12 faces), expression_editor and clarity all pass.
+- Seed probe (four full matches): winners, clocks, kills, event kind/actor/target/value hashes and final unit states are identical before and after.
+- Screenshots under xvfb show the overview, the followed-hero view and both breakdown modes. display_test still hangs under xvfb without a window manager (same on the previous commit).
 
 ### Known problems / warnings
-- Lanes are only 88 units wide, so wall slams are common; the fight story logs only strong slams and Crash Test's.
-- FULL SEND can fire in the first seconds of a match (cross-lane launch). This is intended but may be tuned.
-- All new numbers are prototype tuning.
+- Breakdown totals are live-game totals, even while a replay is playing.
+- Unit name labels still scale with camera zoom (existing behaviour); popups and pills are the only text sized for zoom.
+- Heroes that share a name across teams are distinguished by colour (and by "(Blue)"/"(Red)" in the all-heroes table).
 
 ### Next recommended action
-Replace Poppet's and Kiln's first-pass kits with the user's designs when they arrive, then rerun `tools/balance_probe.gd` and `tests/roster_items_test.gd`.
+Try it on Windows: run `play.ps1`, open a game, press D, and follow heroes. Tune popup sizes and pill wording to taste. Then return to the Poppet/Kiln redesigns.
 
 ---
 ## 14. Decision Log
@@ -463,6 +465,7 @@ Add entries only for decisions with future consequences.
 | 2026-09-15 | Hero-specific rules live in `hero_kits.gd` as static functions. | Keeps `battle.gd` generic without a battle↔kit reference cycle. | Simulation architecture |
 | 2026-09-16 | Stability (1–10) scales knockback; lane edges cause wall slams. | Crash Test's design ("worst Stability, built for crashes") and general physical comedy. | battle `knockback`/`wall_slam`, catalog |
 | 2026-09-16 | Airborne heroes cannot be targeted or damaged. | FULL SEND must commit without mid-flight interaction. | battle, hero_kits flight |
+| 2026-09-16 | Damage steps are recorded per hit (CSV + ledger); popups and swings live in snapshots. | Spectators and stats need to see why a hit did what it did, including in replays. | battle `apply_damage`, battle_view, app_shell |
 
 ---
 

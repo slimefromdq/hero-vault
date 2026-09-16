@@ -3,7 +3,9 @@ extends RefCounted
 const NAMES := ["neutral", "smug", "angry", "happy", "attack", "panic", "hurt", "dazed", "upset", "excited", "knocked_out", "special"]
 const SHEETS := {
 	"hazmat": {"path": "res://assets/hazmat-expressions.png", "ys": [22, 342, 662], "height": 256},
-	"mexai": {"path": "res://assets/mexai-expressions.png", "ys": [10, 334, 658], "height": 292}
+	"mexai": {"path": "res://assets/mexai-expressions.png", "ys": [10, 334, 658], "height": 292},
+	# Irene's circles sit on a 249 px pitch, so crops use explicit columns and an oval mask to drop neighbour slivers.
+	"irene": {"path": "res://assets/irene-expressions.png", "xs": [14, 263, 512, 761], "width": 250, "ys": [10, 328, 652], "height": 271, "mask": "ellipse"}
 }
 var textures := {}
 var profiles := {}
@@ -58,6 +60,17 @@ static func sheet_regions(image: Image, columns: int, rows: int, trim: float) ->
 	for i in range(12):
 		regions.append(Rect2i((i%columns)*width, (i/columns)*height, width, int(height*(1-trim))))
 	return regions
+
+static func ellipse_mask(source: Image) -> Image:
+	var result := source.duplicate() as Image
+	result.convert(Image.FORMAT_RGBA8)
+	var half := Vector2(result.get_size())/2.0
+	for y in range(result.get_height()):
+		for x in range(result.get_width()):
+			var offset := (Vector2(x, y)+Vector2(0.5, 0.5)-half)/half
+			if offset.length_squared() > 1.0:
+				result.set_pixel(x, y, Color(0, 0, 0, 0))
+	return result
 
 static func clean_portrait(source: Image, remove_background: bool) -> Image:
 	var result := source.duplicate() as Image
@@ -150,8 +163,11 @@ func texture(hero: String, expression: String = "neutral") -> Texture2D:
 		return load("res://assets/"+hero+".svg")
 	# Build all faces once when a sheet changes; drawing never repeats pixel work.
 	for i in range(12):
-		var region: Rect2i = regions[i] if custom else Rect2i((i%4)*256,data.ys[i/4],256,data.height)
-		textures[hero+"/"+NAMES[i]] = ImageTexture.create_from_image(clean_portrait(source.get_region(region), profile.get("remove_background",true)))
+		var region: Rect2i = regions[i] if custom else Rect2i(data.get("xs", [0, 256, 512, 768])[i%4], data.ys[i/4], data.get("width", 256), data.height)
+		var face := source.get_region(region)
+		if not custom and data.get("mask", "") == "ellipse":
+			face = ellipse_mask(face)
+		textures[hero+"/"+NAMES[i]] = ImageTexture.create_from_image(clean_portrait(face, profile.get("remove_background",true)))
 	return textures[hero+"/"+NAMES[index]]
 
 static func state(u: Dictionary, time: float, winner: int = -1, profile: Dictionary = {}) -> String:

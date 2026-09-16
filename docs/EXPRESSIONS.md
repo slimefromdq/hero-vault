@@ -6,7 +6,7 @@ Open **Team Builder → Character expressions**. Choose a hero, then **Upload ex
 
 - Sheets can be up to 4096 × 4096 pixels and 32 MB.
 - Set Columns and Rows for a regular grid containing at least 12 cells. The first 12 cells are read left to right, then down.
-- Bottom crop % removes captions from each cell. Built-in Mexai and Hazmat sheets use their authored crop regions; grid controls apply to uploaded replacements.
+- Bottom crop % removes captions from each cell. Built-in Mexai, Hazmat and Irene sheets use their authored crop regions (Irene adds an oval mask so neighbouring circles never bleed in); grid controls apply to uploaded replacements.
 - Remove pale background clears only pale pixels connected to cell edges. Enclosed white eyes and other enclosed details remain intact. Transparent padding is trimmed and the result is centered on a square transparent canvas without stretching.
 - Faces follow this order: neutral, smug, angry, happy, attack, panic, hurt, dazed, upset, excited, knocked out, special.
 - Each row previews the face assigned to that reaction. Use the dropdown to change the assignment, including choosing Neutral to suppress a distinct reaction.

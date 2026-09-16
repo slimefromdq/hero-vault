@@ -42,6 +42,9 @@ var speed_button: Button
 var replay_button: Button
 var fullscreen_button: Button
 var focus_choice: OptionButton
+var breakdown_button: Button
+var breakdown_layer: Node2D
+var breakdown_open := false
 var home_layer: Control
 var game_layer: Control
 var loadout_panel: Control
@@ -99,6 +102,8 @@ func _ready() -> void:
 			show_page("home")
 		if arg == "--focus-first":
 			set_focus(0)
+		if arg == "--breakdown":
+			toggle_breakdown()
 		if arg.begins_with("--capture="):
 			shot_path = arg.trim_prefix("--capture=")
 			shot_delay = 20
@@ -145,6 +150,12 @@ func build_pages() -> void:
 	battle_view.host = self
 	battle_view.portraits = portraits
 	clip.add_child(battle_view)
+	breakdown_layer = Node2D.new()
+	breakdown_layer.visible = false
+	breakdown_layer.draw.connect(draw_breakdown)
+	game_layer.add_child(breakdown_layer)
+	breakdown_button = button("Damage breakdown",Rect2(660,673,162,36),toggle_breakdown,false,game_layer)
+	breakdown_button.add_theme_font_size_override("font_size",13)
 	focus_choice = OptionButton.new()
 	focus_choice.position = Vector2(772,174)
 	focus_choice.size = Vector2(233,30)
@@ -344,6 +355,12 @@ func focus_at(point: Vector2) -> void:
 	if nearest >= 0:
 		set_focus(nearest)
 
+func toggle_breakdown() -> void:
+	breakdown_open = not breakdown_open
+	breakdown_layer.visible = breakdown_open
+	breakdown_button.text = "Close breakdown" if breakdown_open else "Damage breakdown"
+	queue_redraw()
+
 func toggle_fullscreen() -> void:
 	get_window().mode = Window.MODE_WINDOWED if get_window().mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
 
@@ -358,6 +375,9 @@ func _input(event: InputEvent) -> void:
 					set_focus(-1)
 				elif get_window().mode == Window.MODE_FULLSCREEN:
 					get_window().mode = Window.MODE_WINDOWED
+				get_viewport().set_input_as_handled()
+			elif event.keycode == KEY_D:
+				toggle_breakdown()
 				get_viewport().set_input_as_handled()
 			elif event.keycode >= KEY_0 and event.keycode <= KEY_5:
 				set_focus(event.keycode-KEY_1)
@@ -382,6 +402,8 @@ func _process(delta: float) -> void:
 			finish_session(session)
 	if page == "game":
 		battle_view.update_camera(delta)
+		if breakdown_open:
+			breakdown_layer.queue_redraw()
 	refresh_clock -= delta
 	if refresh_clock <= 0:
 		refresh_controls()
@@ -536,7 +558,7 @@ func draw_game() -> void:
 	label_at(format_time(frame.time),Vector2(1030,197),22)
 	label_at("%d TAKEDOWNS" % frame.kills[0],Vector2(325,649),11,BLUE)
 	label_at("%d TAKEDOWNS" % frame.kills[1],Vector2(997,649),11,RED)
-	label_at("Click a hero / 1–5 follow / Scroll zoom / Esc overview",Vector2(500,649),11,MUTED)
+	label_at("Click a hero / 1–5 follow / Scroll zoom / Esc overview / D damage",Vector2(470,649),11,MUTED)
 	if view.replay.is_empty():
 		label_at("Pause and speed apply to this three-game set.",Vector2(322,696),12,MUTED)
 	else:
@@ -612,3 +634,96 @@ func load_profile() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		save_profile()
+
+
+## Overlay on the arena: who took which damage, from whom, and how much protection removed.
+## Totals are cumulative for the live game (replays show the same live totals).
+func draw_breakdown() -> void:
+	if active_session < 0 or page != "game":
+		return
+	var layer: Node2D = breakdown_layer
+	var battle = sessions[active_session].battles[selected]
+	var frame := display_frame()
+	var rect := ARENA_RECT
+	layer.draw_style_box(panel_style(Color(0.04,0.07,0.12,0.97)),rect)
+	var x := rect.position.x+16
+	var y := rect.position.y+26
+	if follow_hero < 0:
+		bd_text("DAMAGE TAKEN / ALL HEROES",Vector2(x,y),13,GOLD)
+		bd_text("Follow a hero (1–5 or click) for a per-source breakdown. Press D to close.",Vector2(x+230,y),11,MUTED)
+		var headers := ["HERO","INCOMING","DEFENSE","COVERED","SHIELDS","HP LOST","BIGGEST SOURCE"]
+		var columns := [0,150,235,320,405,490,580]
+		y += 28
+		for i in range(headers.size()):
+			bd_text(headers[i],Vector2(x+columns[i],y),10,MUTED)
+		for u in frame.units:
+			if u.creep:
+				continue
+			y += 30
+			var totals := breakdown_totals(battle.damage_taken(u.id))
+			var rows: Array = battle.damage_taken(u.id)
+			var top := "—"
+			if not rows.is_empty():
+				var best: Dictionary = rows[0]
+				for row in rows:
+					if row.taken > best.taken:
+						best = row
+				top = ("%s%s / %s" % [best.source,team_suffix(best.source_team),best.ability]).left(34)
+			bd_text(u.name.left(18),Vector2(x+columns[0],y),12,BLUE if u.team == 0 else RED)
+			var values := [totals.boosted,-totals.mitigated,-(totals.intercepted+totals.bodyguard),-totals.absorbed,totals.taken]
+			for i in range(values.size()):
+				bd_text(signed(values[i]) if i in [1,2,3] else "%d" % roundi(values[i]),Vector2(x+columns[i+1],y),12,TEXT if i in [0,4] else GREEN if values[i] <= 0 else RED)
+			bd_text(top,Vector2(x+columns[6],y),11,MUTED)
+		bd_text("Incoming includes item bonuses. Defense = armor/resolve (red when it amplified damage). Covered = Hold the Line interception + Bodyguard Vest.",Vector2(x,rect.end.y-14),10,MUTED)
+		return
+	var hero: Dictionary = frame.units[follow_hero]
+	var rows: Array = battle.damage_taken(hero.id)
+	var totals := breakdown_totals(rows)
+	bd_text("DAMAGE TAKEN / %s" % hero.name.to_upper(),Vector2(x,y),13,GOLD)
+	bd_text("Armor %d  /  Resolve %d  /  Esc for all heroes  /  D to close" % [hero.armor,hero.resolve],Vector2(x+290,y),11,MUTED)
+	y += 22
+	bd_text("%d incoming  %s defense  %s intercepted  %s Bodyguard  %s shields  %s overkill  =  %d HP lost" % [roundi(totals.boosted),signed(-totals.mitigated),signed(-totals.intercepted),signed(-totals.bodyguard),signed(-totals.absorbed),signed(-totals.overkill),roundi(totals.taken)],Vector2(x,y),12,TEXT)
+	var headers := ["SOURCE","ABILITY","HITS","INCOMING","DEFENSE","COVERED","SHIELD","HP LOST"]
+	var columns := [0,110,300,345,420,490,560,625]
+	y += 26
+	for i in range(headers.size()):
+		bd_text(headers[i],Vector2(x+columns[i],y),10,MUTED)
+	for row in rows.slice(0,9):
+		y += 22
+		var team_color: Color = MUTED if row.source_team < 0 else (BLUE if row.source_team == 0 else RED)
+		bd_text(row.source.left(14),Vector2(x+columns[0],y),11,team_color)
+		bd_text(row.ability.left(30),Vector2(x+columns[1],y),11)
+		bd_text("%d%s" % [row.hits," (%d!)" % row.crits if row.crits > 0 else ""],Vector2(x+columns[2],y),11,GOLD if row.crits > 0 else TEXT)
+		bd_text("%d" % roundi(row.boosted),Vector2(x+columns[3],y),11)
+		bd_text(signed(-row.mitigated),Vector2(x+columns[4],y),11,GREEN if row.mitigated >= 0 else RED)
+		bd_text(signed(-(row.intercepted+row.bodyguard)),Vector2(x+columns[5],y),11,GREEN)
+		bd_text(signed(-row.absorbed),Vector2(x+columns[6],y),11,GREEN)
+		bd_text("%d" % roundi(row.taken),Vector2(x+columns[7],y),11,GOLD)
+	if rows.is_empty():
+		bd_text("No hero damage taken yet.",Vector2(x,y+28),12,MUTED)
+	elif rows.size() > 9:
+		bd_text("+%d more sources in the CSV export" % (rows.size()-9),Vector2(x,y+20),10,MUTED)
+	var dealt: Array = battle.damage_dealt(hero.id)
+	var right := rect.end.x-16
+	layer.draw_line(Vector2(rect.position.x+16,rect.end.y-86),Vector2(right,rect.end.y-86),BORDER)
+	bd_text("DEALT TO HEROES",Vector2(x,rect.end.y-64),11,GOLD)
+	for i in range(mini(dealt.size(),6)):
+		var entry: Dictionary = dealt[i]
+		var column := x+(i%3)*250
+		bd_text("%s / %s  %d" % [entry.target.left(12),entry.ability.left(16),roundi(entry.taken)],Vector2(column,rect.end.y-40+(i/3)*20),11)
+
+func bd_text(value: String, pos: Vector2, size: int = 12, color: Color = TEXT) -> void:
+	breakdown_layer.draw_string(font,pos,value,HORIZONTAL_ALIGNMENT_LEFT,-1,size,color)
+
+static func breakdown_totals(rows: Array) -> Dictionary:
+	var totals := {"boosted":0.0,"mitigated":0.0,"intercepted":0.0,"bodyguard":0.0,"absorbed":0.0,"overkill":0.0,"taken":0.0}
+	for row in rows:
+		for key in totals:
+			totals[key] += row[key]
+	return totals
+
+static func team_suffix(team_id: int) -> String:
+	return "" if team_id < 0 else (" (Blue)" if team_id == 0 else " (Red)")
+
+static func signed(value: float) -> String:
+	return ("+%d" if value > 0 else "-%d") % absi(roundi(value)) if roundi(value) != 0 else "0"

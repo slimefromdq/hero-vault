@@ -67,3 +67,7 @@ Shared 18-point team budget; two distinct slots per hero.
 ## New CSV event kinds
 
 `stitch`, `stitch_mirror`, `full_send_launch`, `full_send_land` (`detail` = hit/miss, value = heroes hit), `crash_program_shockwave`, `knockback`, `wall_slam`, `flare_burst` (`detail` = hit/miss), `cloak_reveal`, `cloak_gank_success`, `item_evolved`. Answer "Where is Crash Test now?" with `full_send_*` positions, and "Do Sunday's slow attacks land?" with `projectile_hit`/`projectile_miss` plus `flare_burst`. Existing IDs, including `crown_*` for the Double Damage Idol, are unchanged.
+
+## Damage breakdown columns (2026-09-16)
+
+`damage` rows now also carry `ability`, `raw_damage`, `boosted_damage`, `crit`, `intercepted`, `defense`, `mitigated`, `bodyguard`, `overkill` and `transferred`. See `docs/VISUAL_CLARITY.md`. Answer "Who hurt Hazmat most, and how much did his armor save?" by grouping `damage` rows by `target`, `actor` and `ability`.
