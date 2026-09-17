@@ -138,6 +138,7 @@ func _draw() -> void:
 		draw_line(p - shot.direction * (28 if shot.ultimate else 12), p, color, 7 if shot.ultimate else 3, true)
 		if shot.ultimate:
 			draw_circle(p, 13, Color(GOLD, 0.15))
+	draw_couriers(frame)
 
 	if host.follow_hero >= 0:
 		var hero: Dictionary = frame.units[host.follow_hero]
@@ -246,12 +247,12 @@ func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 		draw_arc(center, radius+6, 0, TAU, 48, GREEN, 3, true)
 		draw_circle(center, radius+8, Color(GREEN, 0.08))
 	var token_radius: float = radius + 1
-	draw_texture_rect(host.expressions.texture(u.portrait, host.expressions.resolve(u, time, winner)), Rect2(center-Vector2.ONE*token_radius, Vector2.ONE*token_radius*2), false, Color(1, 1, 1, 0.35 if u.invisible > 0 else 1.0))
+	draw_texture_rect(host.expressions.texture(u.portrait, host.expressions.resolve(u, time, winner)), Rect2(center-Vector2.ONE*token_radius, Vector2.ONE*token_radius*2), false)
 	host.Expressions.draw_fire(self, Rect2(center-Vector2.ONE*token_radius, Vector2.ONE*token_radius*2), u, time)
 	if u.curse > 0 or u.stun > 0:
 		draw_arc(center, token_radius+7, -PI/2, TAU, 6, Color("d5a0ef"), 3, true)
 		label_at("DISABLED" if u.stun > 0 else "STITCHED", center+Vector2(-23, -token_radius-15), 9, Color("d5a0ef"))
-	if not u.evolved.is_empty():
+	if not u.get("items", []).is_empty():
 		draw_circle(center+Vector2(token_radius-4, -token_radius+4), 5, GOLD)
 	# Low-health ring stays outside the supplied portrait artwork.
 	if u.hp / u.max_hp < 0.25:
@@ -293,8 +294,6 @@ func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 		draw_arc(center,130*WORLD_SCALE,0,TAU,48,Color(SUN,0.5),2,true)
 	if u.get("hold_line",0) > 0:
 		draw_arc(center,140*WORLD_SCALE,0,TAU,48,Color(GREEN,0.4),2,true)
-	if u.get("kill_streak",0) > 0:
-		label_at("+%d POWER" % (u.kill_streak*8),center+Vector2(-23,radius+24),8,GOLD)
 	bar(Rect2(center + Vector2(-22, radius+7), Vector2(44, 4)), u.hp / u.max_hp, color)
 	if u.shield > 0:
 		bar(Rect2(center + Vector2(-22, radius+13), Vector2(44, 3)), u.shield / 115.0, GREEN)
@@ -331,3 +330,24 @@ func draw_crown(frame: Dictionary) -> void:
 	draw_circle(center, 31, Color(0.85, 0.14, 0.18, 0.2))
 	draw_colored_polygon(points, GOLD)
 	label_at("DAMAGE IDOL / 2x", center+Vector2(-54, 30), 11, GOLD)
+
+## Courier drones: a small diamond with a line to the hero it is flying to.
+func draw_couriers(frame: Dictionary) -> void:
+	var logistics: Dictionary = frame.get("logistics", {})
+	for drone in logistics.get("couriers", []):
+		var color := BLUE if drone.team == 0 else RED
+		var center := arena_point(drone.pos)
+		if not drone.cargo.is_empty():
+			for u in frame.units:
+				if u.id == drone.target:
+					draw_line(center, arena_point(u.pos), Color(color, 0.35), 1.5, true)
+					break
+		var s := 7.0
+		var body := PackedVector2Array([center+Vector2(0, -s), center+Vector2(s, 0), center+Vector2(0, s), center+Vector2(-s, 0)])
+		draw_colored_polygon(body, color.darkened(0.2))
+		body.append(body[0])
+		draw_polyline(body, GOLD if not drone.cargo.is_empty() else TEXT, 1.5, true)
+		draw_line(center+Vector2(-10, -8), center+Vector2(10, -8), TEXT, 1.5, true)
+		if not drone.cargo.is_empty():
+			draw_circle(center, 2.5, GOLD)
+			label_at("DRONE", center+Vector2(-13, 17), 8, color)

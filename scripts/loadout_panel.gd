@@ -3,14 +3,12 @@ const MapLayout = preload("res://scripts/map_layout.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 var host: Node2D
 var team: Array = []
-var gear: Array = []
 var orders: Array = []
 var hero_choices: Array = []
-var item_choices: Array = []
 var order_choices: Array = []
 var role_labels: Array = []
 var portrait_views: Array = []
-var budget_label: Label
+var status_label: Label
 var detail_label: Label
 var apply_button: Button
 var draft_name: LineEdit
@@ -49,7 +47,7 @@ func _ready() -> void:
 	for value in ["Protect allies","Hold the front","Hold ultimates for a finish"]:
 		assignment_choice.add_item(value)
 	assignment_choice.item_selected.connect(func(_value): update_view())
-	for heading in [["HERO", 150], ["LANE / ASSIGNMENT", 409], ["ITEM SLOT 1", 639], ["ITEM SLOT 2", 970]]:
+	for heading in [["HERO", 150], ["LANE / ASSIGNMENT", 409]]:
 		text(heading[0], Vector2(heading[1], 182), Vector2(220, 25), 11)
 	for row in range(5):
 		var y := 212 + row*78
@@ -76,29 +74,14 @@ func _ready() -> void:
 		order.get_popup().set_item_tooltip(3, "The shorter diagonal route between vaults. Earlier wave contact, with a tower guarding each end.")
 		order.item_selected.connect(func(index): orders[slot] = index; update_view())
 		order_choices.append(order)
-		var row_items := []
-		for item_slot in range(2):
-			var which := item_slot
-			var items := choice(Vector2(639 + item_slot*331, y), 307)
-			for id in Catalog.ITEM_IDS:
-				var data: Dictionary = Catalog.ITEMS[id]
-				items.add_item("%s  [%d]" % [data.name, data.cost])
-				items.get_popup().set_item_tooltip(items.item_count-1, Catalog.item_tooltip(id))
-			items.item_selected.connect(func(index):
-				gear[slot][which] = Catalog.ITEM_IDS[index]
-				detail_label.text = Catalog.item_tooltip(Catalog.ITEM_IDS[index])
-				update_view())
-			row_items.append(items)
-		item_choices.append(row_items)
-		role_labels.append(text("", Vector2(150, y+39), Vector2(1190, 28), 12))
-	budget_label = text("", Vector2(54, 610), Vector2(1200, 27), 19)
-	detail_label = text("Hover a hero or item in its menu for details. Double Damage Idol spawns only in the jungle; it cannot be equipped here.", Vector2(54, 652), Vector2(720, 55), 13)
+		role_labels.append(text("", Vector2(639, y+8), Vector2(700, 50), 12))
+	status_label = text("", Vector2(54, 610), Vector2(1200, 27), 19)
+	detail_label = text("Hover a hero in its menu for details. Items are bought during a match from the remote shop and flown to heroes by your courier drone.", Vector2(54, 652), Vector2(720, 55), 13)
 	detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	apply_button = make_button("SAVE TEAM", Vector2(1170, 656), Vector2(200, 42), apply)
 	make_button("Discard edits",Vector2(1170,123),Vector2(200,36),reload_saved)
 	make_button("Restore starter squad", Vector2(942, 656), Vector2(210, 42), func():
 		team = Catalog.DEFAULT_TEAM.duplicate()
-		gear = Catalog.DEFAULT_ITEMS.duplicate(true)
 		orders = MapLayout.DEFAULT_ORDERS.duplicate()
 		update_view())
 	hide()
@@ -140,7 +123,6 @@ func open() -> void:
 
 func reload_saved() -> void:
 	team = host.team.duplicate()
-	gear = host.equipment.duplicate(true)
 	orders = host.lane_orders.duplicate()
 	draft_name.text = host.squad_name
 	plan_choice.select(host.plan)
@@ -149,7 +131,7 @@ func reload_saved() -> void:
 	update_view()
 
 func is_dirty() -> bool:
-	return initialized and (team != host.team or gear != host.equipment or orders != host.lane_orders or draft_name.text != host.squad_name or plan_choice.selected != host.plan or assignment_choice.selected != host.assignment)
+	return initialized and (team != host.team or orders != host.lane_orders or draft_name.text != host.squad_name or plan_choice.selected != host.plan or assignment_choice.selected != host.assignment)
 
 func update_view() -> void:
 	if team.size() != 5:
@@ -161,19 +143,16 @@ func update_view() -> void:
 		var data: Dictionary = Catalog.HEROES[team[row]]
 		role_labels[row].text = "%s  ·  %s  |  %s" % [data.role, data.personality, data.kit]
 		role_labels[row].tooltip_text = data.description
-		for slot in range(2):
-			item_choices[row][slot].select(Catalog.ITEM_IDS.find(gear[row][slot]))
-	var error := Catalog.validate(team, gear)
-	budget_label.text = "%d / %d ITEM POINTS   ·   %s" % [Catalog.budget(gear), Catalog.ITEM_BUDGET, ("Unsaved changes" if is_dirty() else "Saved / ready to queue") if error.is_empty() else error]
-	budget_label.add_theme_color_override("font_color", Color("8cddc6") if error.is_empty() else Color("f49bae"))
+	var error := Catalog.validate(team)
+	status_label.text = ("Unsaved changes" if is_dirty() else "Saved / ready to queue") if error.is_empty() else error
+	status_label.add_theme_color_override("font_color", Color("8cddc6") if error.is_empty() else Color("f49bae"))
 	apply_button.disabled = not error.is_empty() or draft_name.text.strip_edges().is_empty()
 	host.queue_redraw()
 
 func apply() -> void:
-	if Catalog.validate(team,gear) != "" or draft_name.text.strip_edges().is_empty():
+	if Catalog.validate(team) != "" or draft_name.text.strip_edges().is_empty():
 		return
 	host.team = team.duplicate()
-	host.equipment = gear.duplicate(true)
 	host.lane_orders = orders.duplicate()
 	host.squad_name = draft_name.text.strip_edges()
 	draft_name.text = host.squad_name

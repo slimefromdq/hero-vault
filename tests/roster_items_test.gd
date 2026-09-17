@@ -1,10 +1,8 @@
 extends SceneTree
-## Poppet, Crash Test, Kiln, Sunday; Ambush Shield, Invisible Cloak, the 1-point
-## items and burst item evolution.
+## Poppet, Crash Test, Kiln, Sunday, and seed-reproducibility with in-match shopping.
 const Battle = preload("res://scripts/battle.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 const TEAM := ["poppet", "crash_test", "kiln", "sunday", "hazmat"] # Units 0-4.
-const EMPTY := [["none", "none"], ["none", "none"], ["none", "none"], ["none", "none"], ["none", "none"]]
 var failures := 0
 
 func check(ok: bool, message: String) -> void:
@@ -15,7 +13,7 @@ func check(ok: bool, message: String) -> void:
 ## Units 0-4 are TEAM; 5-9 are rival 0 (hazmat, irene, eleanor, colony, oddity).
 func clean(seed_value: int = 11):
 	var b = Battle.new()
-	b.setup(seed_value, 0, 0, 0, TEAM, EMPTY)
+	b.setup(seed_value, 0, 0, 0, TEAM)
 	for i in range(b.units.size()):
 		var u: Dictionary = b.units[i]
 		u.items.clear()
@@ -26,17 +24,14 @@ func clean(seed_value: int = 11):
 	return b
 
 func _init() -> void:
-	check(Catalog.validate_definitions() == "", "Definitions, evolutions and rival squads validate")
-	check(Catalog.ITEM_IDS.size() == 15, "Fourteen purchasable items plus Empty")
+	check(Catalog.validate_definitions() == "", "Definitions, shop items and rival squads validate")
+	check(Battle.ShopManager.ITEM_IDS.size() == 3, "Three prototype shop items")
 	check(not Catalog.HEROES.has("atlas"), "Tank carry is scrapped for now")
 	check(Catalog.migrate_team(["atlas", "irene", "irene", "volt", "kiln"]) == ["hazmat", "irene", "eleanor", "colony", "kiln"], "Retired or duplicate heroes are replaced one-for-one")
-	check("EVOLVES" in Catalog.item_tooltip("coin") and not "EVOLVES" in Catalog.item_tooltip("glass"), "Tooltips explain evolution")
 	poppet_checks()
 	crash_test_checks()
 	kiln_checks()
 	sunday_checks()
-	item_checks()
-	evolution_checks()
 	determinism_checks()
 	print("ROSTER/ITEMS PASS" if failures == 0 else "ROSTER/ITEMS FAIL: %d" % failures)
 	quit(failures)
@@ -231,118 +226,15 @@ func sunday_checks() -> void:
 	d.update_fields(0.05)
 	check(d.fields.size() == 1, "The zone stays even if Sunday falls")
 
-func item_checks() -> void:
-	var b = clean()
-	var a: Dictionary = b.units[4]
-	var t: Dictionary = b.units[5]
-	# Ambush Shield
-	a.items = ["ambush"]
-	b.apply_damage(a, a.max_hp*0.2, t.id)
-	check(a.shield == 0, "Ambush Shield ignores small hits")
-	b.apply_damage(a, a.max_hp*0.15, t.id)
-	check(a.shield > 0 and a.ambush_cd == 20.0, "Ambush Shield triggers on burst damage")
-	# Invisible Cloak
-	var c = clean()
-	var ganker: Dictionary = c.units[0]
-	var victim: Dictionary = c.units[5]
-	ganker.items = ["cloak"]
-	ganker.pos = Vector2(500, 80)
-	victim.pos = Vector2(700, 80)
-	check(c.select_enemy(victim).get("id", -1) == ganker.id, "A visible ganker is targeted")
-	c.try_cloak(ganker, "approach", victim)
-	check(ganker.invisible == 6.0 and ganker.cloak_cd == 30.0, "Cloak triggers when closing on a distant hero")
-	check(c.select_enemy(victim).get("id", -1) != ganker.id, "Enemies cannot target a cloaked hero")
-	victim.pos = Vector2(540, 80)
-	c.update_effects(ganker, 0.05)
-	check(ganker.invisible == 0.0, "Proximity reveals the cloaked hero")
-	ganker.invisible = 3.0
-	c.apply_damage(ganker, 1, victim.id)
-	check(ganker.invisible == 0.0, "Damage reveals the cloaked hero")
-	ganker.cloak_cd = 0
-	ganker.invisible = 0
-	victim.pos = Vector2(200, 0)
-	c.try_cloak(ganker, "approach", victim)
-	c.apply_damage(victim, 99999, ganker.id)
-	check(c.records.any(func(r): return r.kind == "cloak_gank_success"), "Cloaked takedowns are logged for gank analysis")
-	# Scout Pin
-	victim.hp = victim.max_hp
-	victim.items = ["scout"]
-	ganker.invisible = 6.0
-	ganker.pos = Vector2(0, 0)
-	victim.pos = Vector2(200, 0)
-	c.update_effects(victim, 0.05)
-	check(ganker.invisible == 0.0 and victim.scout_cd == 10.0, "Scout Pin reveals nearby hidden heroes")
-	# Lane Rations
-	a.items = ["rations"]
-	a.hp = 100
-	b.clock = 50
-	a.last_hero_hit = 47
-	b.update_effects(a, 1.0)
-	check(a.hp == 100, "Rations wait until hero damage stops")
-	a.last_hero_hit = 40
-	b.update_effects(a, 1.0)
-	check(is_equal_approx(a.hp, 100+4.0+0.4*a.level), "Rations heal after six quiet seconds")
-	# Tempered Sole
-	a.items = ["sole"]
-	a.retreating = false
-	b.begin_retreat(a)
-	check(a.sole_time == 2.5 and b.movement_speed(a, a.pos) == a.speed*1.4, "Tempered Sole boosts the start of a retreat")
-	a.sole_time = 0
-	a.retreating = true
-	a.sole_cd = 0
-	b.begin_retreat(a)
-	check(a.sole_time == 0, "Sole only triggers when a retreat begins")
-
-func evolution_checks() -> void:
-	var b = clean()
-	var a: Dictionary = b.units[4]
-	var t: Dictionary = b.units[5]
-	a.items = ["first_hit"]
-	for i in range(5):
-		b.clock += 10
-		b.apply_damage(t, 1, a.id, false, "basic")
-	check("first_hit" in a.evolved, "First Hit Hammer evolves after five procs")
-	check(b.events.any(func(e): return e.kind == "evolve" and "Opening Sledge" in e.detail), "Evolution is announced")
-	b.clock += 10
-	t.stun = 0
-	var hp: float = t.hp
-	b.apply_damage(t, 1, a.id, false, "basic")
-	check(hp-t.hp == 101 and t.stun > 0, "Opening Sledge hits harder and staggers")
-	a.items = ["coin"]
-	check(b.coin_chance(a) == 0.08, "Coin starts at 8%")
-	b.grant_xp(a, 9999)
-	check(a.level == 13 and "coin" in a.evolved and b.coin_chance(a) == 0.14, "Coin evolves at level 13")
-	# Stolen items never evolve for the thief.
-	var thief: Dictionary = b.units[6]
-	var owner: Dictionary = b.units[0]
-	owner.items = ["execution"]
-	b.thefts.append({"owner": owner.id, "thief": thief.id, "slot": 0, "item": "execution", "until": b.clock+8.0})
-	for i in range(3):
-		b.advance_item(thief, "execution", 1)
-		b.advance_item(owner, "execution", 1)
-	check("execution" not in thief.evolved and "execution" not in owner.evolved, "Suppressed or stolen items make no evolution progress")
-	b.thefts.clear()
-	for i in range(3):
-		b.advance_item(owner, "execution", 1)
-	check("execution" in owner.evolved, "Execution Blade evolves after three kills")
-	a.items = ["bodyguard"]
-	b.units[3].hp = 1
-	b.units[3].pos = a.pos
-	for i in range(20):
-		b.apply_damage(a, 100, t.id)
-		a.hp = a.max_hp
-	check("bodyguard" in a.evolved, "Bodyguard Vest evolves after blocking 400 damage")
-	hp = a.hp
-	b.apply_damage(a, 100, t.id)
-	check(is_equal_approx(hp-a.hp, 65.0), "Shield Wall Vest blocks 35%")
-
 func determinism_checks() -> void:
-	var gear := [["ambush", "rations"], ["first_hit", "sole"], ["bodyguard", "coin"], ["scout", "execution"], ["cloak", "coward"]]
 	var runs := []
 	for attempt in range(2):
 		var b = Battle.new()
-		b.setup(808, 1, 0, 2, TEAM, gear)
+		b.setup(808, 1, 0, 2, TEAM)
 		for i in range(3600):
+			if i == 100:
+				b.request_purchase(0, b.units[0].id, "power_cell")
+				b.request_purchase(0, b.units[3].id, "swift_treads")
 			b.step()
-		runs.append([b.records.size(), b.kills.duplicate(), b.units.map(func(u): return u.pos)])
-	check(runs[0] == runs[1], "New heroes and items stay seed-reproducible")
+		runs.append([b.records.size(), b.kills.duplicate(), b.units.map(func(u): return u.pos), b.units.map(func(u): return u.items)])
+	check(runs[0] == runs[1], "New heroes, purchases and deliveries stay seed-reproducible")

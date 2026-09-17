@@ -1,6 +1,6 @@
 # Current content reference
 
-This is the authoritative list of implemented heroes and items. Numbers are prototype tuning, not balance claims. Data lives in `scripts/catalog.gd`; hero behavior lives in `scripts/hero_kits.gd`; shared combat and item rules live in `scripts/battle.gd`.
+This is the authoritative list of implemented heroes and items. Numbers are prototype tuning, not balance claims. Data lives in `scripts/catalog.gd`; hero behavior lives in `scripts/hero_kits.gd`; shared combat rules live in `scripts/battle.gd`; shop items and delivery live in `scripts/shop_catalog.gd`, `scripts/shop_manager.gd`, `scripts/courier_drone.gd` and `scripts/hero_inventory.gd`.
 
 Supersedes the kit and item tables in [REWORK_2026-09-15.md](REWORK_2026-09-15.md). The scaling tank-carry hero (Atlas) was removed on 2026-09-15 and is parked, not cancelled.
 
@@ -11,7 +11,7 @@ Supersedes the kit and item tables in [REWORK_2026-09-15.md](REWORK_2026-09-15.m
 | Hazmat | Other | Slow heavy melee with stagger | Red Gas follows him, damages enemies and cuts their healing by 20% | OVERPRESSURE: bigger gas, +Resolve, heals from gas damage (90s) |
 | Irene | Circus | Fast knives, 25% lifesteal | Leeching Cut dash; steals 12% max HP for 7s | Blood Rush: attack/move speed, 50% lifesteal, redirects enemy healing (75s) |
 | Oddity | Circus | Slow, dodgeable confetti | Teleport; Encore stores a nearby ultimate for a weaker copy (own 105s timer) | INTERMISSION: 3s freeze, seeded enemy rearrangement (120s) |
-| Mexai | Fantasy | Quick shiv | Pilfer: borrow an equipped item for 8s | Grand Larceny: dash-steal chain (80s) |
+| Mexai | Fantasy | Quick shiv | Pilfer: borrow a delivered item for 8s | Grand Larceny: dash-steal chain (80s) |
 | Eleanor | Fantasy | Slow, broad greatsword arc | Intercede: rush to a wounded ally, shield, knockback | Hold the Line: huge defenses, 35% ally damage interception, slowed (100s) |
 | Yellow Colony | Other | Melee swarm; grows every two levels | Area slam | All Together: larger slam and shield (100s) |
 | **Poppet** | Objects given life | Fast needles (620 speed) | **Stitch**: binds an enemy hero for 5s; 35% of damage Poppet takes is mirrored to them | **Pincushion**: five-needle fan; each needle can miss (85s) |
@@ -31,43 +31,22 @@ AI quirks: Poppet focuses her stitched target. Crash Test prefers enemies alread
 - Size: Crash Test's token is larger (radius 21 vs 17).
 - Airborne heroes are skipped by targeting, projectiles, fields, towers and damage.
 
-## Items (14 + Empty)
+## Items (remote shop)
 
-Shared 18-point team budget; two distinct slots per hero.
+Bought in-match and delivered by the courier drone. Data: `scripts/shop_catalog.gd`. Rules: [SHOP_AND_DRONE.md](SHOP_AND_DRONE.md). Six inventory slots per hero, and queued orders reserve slots.
 
-| Item | Cost | Effect | Evolves into (condition → upgrade) |
-|---|---:|---|---|
-| Last Stand Shield | 2 | Below 25% HP: 35%-max-HP shield for 5s, once per life | — |
-| Execution Blade | 3 | +60% damage to heroes below 20% HP | **Headsman's Axe** (3 hero kills) → threshold 30% |
-| First Hit Hammer | 2 | +60 first basic hit per enemy; refreshes after 8s apart | **Opening Sledge** (5 procs) → +100 and 0.4s stagger |
-| Revenge Armor | 2 | +40 Armor/Resolve against your last killer | — |
-| Kill Streak Crown | 3 | +8 Power per consecutive kill; resets on death | — |
-| Coward's Boots | 1 | +50% move below 30% HP when fleeing | — |
-| Bodyguard Vest | 2 | 25% damage reduction beside a lower-HP ally | **Shield Wall Vest** (400 damage prevented) → 35% |
-| Glass Cannon | 2 | +25 Power, −25 Armor/Resolve | — |
-| Lucky Coin | 1 | 8% triple-damage basic hit (seeded) | **Two-Headed Coin** (level 13) → 14% |
-| **Ambush Shield** | 2 | Losing 30% max HP within 2s: 30%-max-HP shield for 3s; 20s cooldown | — |
-| **Invisible Cloak** | 3 | On a jungle rotation or when closing on a hero 150+ away: enemies can't see you for 6s. Attacking, taking damage or coming within 60 of an enemy hero reveals you; towers ignore you. 30s cooldown | — |
-| **Lane Rations** | 1 | After 6s without hero damage: 4 HP/s (+0.4/level) | **Hearty Rations** (level 9) → starts after 4s, double healing |
-| **Scout Pin** | 1 | Reveals hidden enemy heroes within 260; 10s cooldown after a reveal | — |
-| **Tempered Sole** | 1 | Starting a retreat: +40% move for 2.5s; 12s cooldown | **Tempered Greaves** (4 boosted retreats) → +55% for 4s |
+| ID | Item | Cost | Effect |
+|---|---|---:|---|
+| `power_cell` | Power Cell | 250 | +20 Power |
+| `vital_plate` | Vital Plate | 200 | +100 Max HP |
+| `swift_treads` | Swift Treads | 150 | +2 Move Speed |
 
-### Evolution rules
-
-- Evolution is a one-time, announced jump (`ITEM EVOLVED` in the fight story, `item_evolved` in the CSV). The evolved name shows in gold in the match equipment panel.
-- Progress belongs to the owner. A stolen copy works at base strength for the thief and makes no progress; a suppressed item makes no progress for its owner either.
-- Evolution data sits on each item in `Catalog.ITEMS[id].evolve` (`trigger`: `level`, `procs`, `kills`, `blocked`, `retreats`). `Catalog.validate_definitions()` checks it.
-
-### Statistics these items produce
-
-- `cloak_gank_success`: a takedown within 12s of cloaking. Compare with cloak activations to answer "does the Cloak pay for itself?"
-- `cloak_reveal` with `detail` = `attack`, `damaged`, `proximity` or `scout`.
-- `item_proc` for `ambush`, `sole`, `scout` and the older triggered items; `item_evolved` with the progress value at evolution.
+The 14 pre-match items, the 18-point budget and item evolution were removed on 2026-09-17. Shop CSV events: `item_purchased`, `drone_departed`, `delivery_aborted`, `item_delivered`.
 
 ## New CSV event kinds
 
-`stitch`, `stitch_mirror`, `full_send_launch`, `full_send_land` (`detail` = hit/miss, value = heroes hit), `crash_program_shockwave`, `knockback`, `wall_slam`, `flare_burst` (`detail` = hit/miss), `cloak_reveal`, `cloak_gank_success`, `item_evolved`. Answer "Where is Crash Test now?" with `full_send_*` positions, and "Do Sunday's slow attacks land?" with `projectile_hit`/`projectile_miss` plus `flare_burst`. Existing IDs, including `crown_*` for the Double Damage Idol, are unchanged.
+`stitch`, `stitch_mirror`, `full_send_launch`, `full_send_land` (`detail` = hit/miss, value = heroes hit), `crash_program_shockwave`, `knockback`, `wall_slam`, `flare_burst` (`detail` = hit/miss). Answer "Where is Crash Test now?" with `full_send_*` positions, and "Do Sunday's slow attacks land?" with `projectile_hit`/`projectile_miss` plus `flare_burst`. Existing IDs, including `crown_*` for the Double Damage Idol, are unchanged.
 
 ## Match pacing modifier (Development Cycle 001)
 
-The catalog's hero HP and flat HP growth are multiplied by **1.4** when deployed in a match; damage, equipment and authored abilities are unchanged. Expanded three-lane travel, creep roles, tower defenses, retreat decisions and the timed Central Power Node are specified in [DESIGN.md](DESIGN.md#development-cycle-001-make-matches-breathe).
+The catalog's hero HP and flat HP growth are multiplied by **1.4** when deployed in a match; damage and authored abilities are unchanged. Expanded three-lane travel, creep roles, tower defenses, retreat decisions and the timed Central Power Node are specified in [DESIGN.md](DESIGN.md#development-cycle-001-make-matches-breathe).

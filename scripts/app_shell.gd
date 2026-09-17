@@ -6,6 +6,9 @@ const Session = preload("res://scripts/match_session.gd")
 const LoadoutPanel = preload("res://scripts/loadout_panel.gd")
 const BattleView = preload("res://scripts/battle_view.gd")
 const Expressions = preload("res://scripts/expressions.gd")
+const ShopManager = preload("res://scripts/shop_manager.gd")
+const HeroInventory = preload("res://scripts/hero_inventory.gd")
+const CourierDrone = preload("res://scripts/courier_drone.gd")
 var expressions = Expressions.new()
 var expression_editor: AcceptDialog
 const ARENA_RECT := Rect2(322,214,783,410)
@@ -23,7 +26,6 @@ const MAX_ACTIVE_SERIES := 3
 var font: Font = ThemeDB.fallback_font
 var portraits := {}
 var team: Array = Catalog.DEFAULT_TEAM.duplicate()
-var equipment: Array = Catalog.DEFAULT_ITEMS.duplicate(true)
 var lane_orders: Array = MapLayout.DEFAULT_ORDERS.duplicate()
 var squad_name := "The Brave Ones"
 var plan := 0
@@ -52,6 +54,7 @@ var tabs_row: HBoxContainer
 var home_games: VBoxContainer
 var home_game_buttons: Array = []
 var clip_buttons: Array = []
+var shop_buttons: Array = []
 var status_note := "Build a team, queue a set, and follow each game in its own tab."
 var refresh_clock := 0.0
 var shot_path := ""
@@ -171,6 +174,22 @@ func build_pages() -> void:
 			refresh_controls(),false,game_layer)
 		control.add_theme_font_size_override("font_size",12)
 		clip_buttons.append(control)
+	# Remote shop: each button buys for the hero currently selected (followed).
+	for i in range(ShopManager.ITEM_IDS.size()):
+		var item: String = ShopManager.ITEM_IDS[i]
+		var control := button("",Rect2(868,746+i*38,238,33),func():buy_item(item),false,game_layer)
+		control.add_theme_font_size_override("font_size",12)
+		control.tooltip_text = ShopManager.ITEMS[item].summary
+		shop_buttons.append(control)
+
+func shop_hero_index() -> int:
+	return follow_hero if follow_hero >= 0 and follow_hero < 5 else -1
+
+func buy_item(item: String) -> void:
+	if active_session < 0:
+		return
+	sessions[active_session].purchase(selected,shop_hero_index(),item)
+	refresh_controls()
 
 func show_page(value: String) -> void:
 	if value == "game" and active_session < 0:
@@ -195,14 +214,14 @@ func queue_games() -> void:
 	if active_count() >= MAX_ACTIVE_SERIES:
 		status_note = "Three sets are already active. Finish a set before queuing another."
 		return
-	var error := Catalog.validate(team,equipment)
+	var error := Catalog.validate(team)
 	if error != "":
 		status_note = error
 		show_page("team")
 		return
 	queue_number += 1
 	var session = Session.new()
-	session.setup(queue_number,squad_name,team,equipment,lane_orders,plan,assignment)
+	session.setup(queue_number,squad_name,team,lane_orders,plan,assignment)
 	sessions.append(session)
 	var index := sessions.size()-1
 	for game in range(3):
@@ -310,6 +329,14 @@ func refresh_controls() -> void:
 		pause_button.text = "Pause set" if session.running else "Resume set"
 		speed_button.text = "%dx speed" % Session.SPEEDS[session.speed_index]
 		replay_button.visible = not session.views[selected].replay.is_empty()
+		var battle = session.battles[selected]
+		var live: bool = session.views[selected].replay.is_empty() and battle.winner == -1
+		var credits: int = battle.economies[0].balance()
+		for i in range(shop_buttons.size()):
+			var item: String = ShopManager.ITEM_IDS[i]
+			var cost := ShopManager.item_cost(item)
+			shop_buttons[i].text = "%s  (%s)  /  %d" % [ShopManager.item_name(item),ShopManager.ITEMS[item].summary,cost]
+			shop_buttons[i].disabled = not live or shop_hero_index() < 0 or credits < cost
 		var clips: Array = session.game_clips(selected)
 		for i in range(3):
 			clip_buttons[i].visible = i < clips.size()
@@ -475,7 +502,7 @@ func draw_home() -> void:
 	box(Rect2(26,170,554,455))
 	label_at("YOUR NEXT TEAM",Vector2(58,205),12,GOLD)
 	label_at(squad_name.left(25),Vector2(58,246),27)
-	label_at("%d / 18 item points  /  5 heroes" % Catalog.budget(equipment),Vector2(58,274),14,MUTED)
+	label_at("5 heroes  /  items bought in-match, delivered by drone",Vector2(58,274),14,MUTED)
 	for i in range(5):
 		var x := 62+i*98
 		draw_texture_rect(portraits[team[i]],Rect2(x,310,64,64),false)
@@ -521,16 +548,7 @@ func draw_game() -> void:
 	label_at(hero.name.to_upper().left(22),Vector2(42,610),19,GOLD)
 	label_at(Catalog.HEROES[hero.portrait].role.left(28),Vector2(42,637),12,MUTED)
 	label_at("ULT / %ds" % int(ceil(hero.ultimate)) if hero.ultimate > 0 else "ULT / READY",Vector2(42,666),13,GOLD)
-	label_at("MATCH EQUIPMENT",Vector2(42,701),11,MUTED)
-	for i in range(hero.items.size()):
-		var item_id: String = hero.items[i]
-		var title: String = Catalog.item_name(item_id, item_id in hero.evolved)
-		var stolen := false
-		for loan in frame.get("thefts",[]):
-			stolen = stolen or (loan.owner == hero.id and loan.slot == i)
-		label_at(title+(" [STOLEN]" if stolen else ""),Vector2(42,731+i*25),12,RED if stolen else (GOLD if item_id in hero.evolved else TEXT))
-	label_at("%d kills / %d deaths" % [hero.kills,hero.deaths],Vector2(42,801),14)
-	label_at("Saved-team edits apply to new games.",Vector2(42,838),10,MUTED)
+	draw_drone_status(frame)
 	box(Rect2(306,168,816,555),Color("101c2a"))
 	var mode := "REPLAY" if not view.replay.is_empty() else game_status(session,selected)
 	label_at("%s / %s" % [RIVALS[selected].to_upper(),mode],Vector2(326,195),12,GREEN)
@@ -542,13 +560,46 @@ func draw_game() -> void:
 		label_at("Pause and speed apply to this three-game set.",Vector2(322,696),12,MUTED)
 	else:
 		label_at("Live games continue",Vector2(500,696),12,GOLD)
-	box(Rect2(306,738,816,122))
-	draw_texture_rect(expressions.texture(hero.portrait, expressions.resolve(hero, frame.time, frame.winner)), Rect2(1006,752,92,92), false)
-	Expressions.draw_fire(self, Rect2(1006,752,92,92), hero, frame.time)
-	label_at("HERO IN FOCUS / "+hero.name.to_upper(),Vector2(325,767),12,GOLD)
-	label_at(Catalog.HEROES[hero.portrait].kit,Vector2(325,795),17)
-	label_at("Damage: %d  /  Healing: %d  /  Item triggers: %d" % [hero.damage_done,hero.healing_done,hero.item_procs],Vector2(325,827),13,MUTED)
+	draw_shop(session,frame)
 	draw_story(session,frame,hero)
+
+func draw_drone_status(frame: Dictionary) -> void:
+	var logistics: Dictionary = frame.get("logistics",{})
+	if logistics.is_empty():
+		return
+	var drone: Dictionary = logistics.couriers[0]
+	label_at("COURIER DRONE",Vector2(42,700),11,MUTED)
+	label_at(drone.state_name,Vector2(42,722),13,GREEN if drone.state == CourierDrone.State.IDLE_AT_BASE else GOLD)
+	var cargo: String = ShopManager.item_name(drone.cargo.item) if not drone.cargo.is_empty() else "none"
+	var target: String = drone.cargo.hero_name if not drone.cargo.is_empty() else "none"
+	label_at("Cargo: "+cargo.left(20),Vector2(42,742),11)
+	label_at("Target: "+target.left(20),Vector2(42,759),11)
+	var pending: Array = logistics.queues[0].queue.filter(func(order):return order.status == ShopManager.PENDING)
+	label_at("Queue (%d):" % pending.size(),Vector2(42,779),11,MUTED)
+	for i in range(mini(pending.size(),3)):
+		var order: Dictionary = pending[i]
+		label_at(("%s -> %s" % [ShopManager.item_name(order.item),order.hero_name]).left(28),Vector2(42,796+i*15),10)
+	if pending.size() > 3:
+		label_at("+%d more" % (pending.size()-3),Vector2(42,841),10,MUTED)
+
+func draw_shop(session, frame: Dictionary) -> void:
+	box(Rect2(306,738,816,122))
+	var credits: int = int(floor(frame.get("logistics",{}).get("economy",[{"credits":0}])[0].credits))
+	var index := shop_hero_index()
+	label_at("REMOTE SHOP",Vector2(325,762),12,GOLD)
+	label_at("TEAM CREDITS  %d" % credits,Vector2(700,762),13,GOLD)
+	if index < 0:
+		label_at("Select one of your heroes (click, or keys 1-5) to shop for them.",Vector2(325,792),14)
+		label_at("Items are paid for now and flown out by the courier drone.",Vector2(325,815),12,MUTED)
+	else:
+		var hero: Dictionary = frame.units[index]
+		label_at(hero.name.to_upper().left(20)+("  /  KO %ds" % int(ceil(hero.respawn)) if hero.hp <= 0 else ""),Vector2(430,762),13,RED if hero.hp <= 0 else TEXT)
+		label_at("HP %d/%d   Power %d   Speed %.0f   L%d   %dK / %dD" % [hero.hp,hero.max_hp,hero.damage,hero.speed,hero.level,hero.kills,hero.deaths],Vector2(325,788),13)
+		var names: Array = HeroInventory.item_names(hero)
+		label_at(("Inventory (%d/%d): " % [names.size(),HeroInventory.MAX_SLOTS])+(", ".join(names) if not names.is_empty() else "empty").left(70),Vector2(325,811),12,MUTED)
+	var note: String = session.order_note(selected)
+	if note != "":
+		label_at(note.left(80),Vector2(325,842),12,GREEN if session.views[selected].shop_ok else RED)
 
 func draw_story(session, frame: Dictionary, hero: Dictionary) -> void:
 	box(Rect2(1144,168,266,692))
@@ -576,7 +627,7 @@ func draw_story(session, frame: Dictionary, hero: Dictionary) -> void:
 func save_profile() -> void:
 	var file := FileAccess.open("user://squad.json", FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"squad_name": squad_name, "plan": plan, "assignment": assignment, "account": account, "team": team, "equipment": equipment, "lane_orders": lane_orders, "queue_number": queue_number}))
+		file.store_string(JSON.stringify({"squad_name": squad_name, "plan": plan, "assignment": assignment, "account": account, "team": team, "lane_orders": lane_orders, "queue_number": queue_number}))
 
 func load_profile() -> void:
 	if not FileAccess.file_exists("user://squad.json"):
@@ -588,17 +639,9 @@ func load_profile() -> void:
 		# Retired heroes are replaced one-for-one so the rest of the roster survives.
 		if saved_team is Array:
 			saved_team = Catalog.migrate_team(saved_team)
-		var saved_items = value.get("equipment", Catalog.DEFAULT_ITEMS)
-		# Retain the user's roster while replacing retired equipment with empty slots.
-		if saved_items is Array:
-			for row in saved_items:
-				if row is Array:
-					for i in range(row.size()):
-						if not Catalog.ITEMS.has(row[i]):
-							row[i] = "none"
-		if saved_team is Array and saved_items is Array and Catalog.validate(saved_team, saved_items) == "":
+		# Pre-match equipment from older saves is ignored: items are bought in-match now.
+		if saved_team is Array and Catalog.validate(saved_team) == "":
 			team = saved_team.duplicate()
-			equipment = saved_items.duplicate(true)
 		var saved_orders = value.get("lane_orders", MapLayout.DEFAULT_ORDERS.duplicate())
 		if saved_orders is Array and saved_orders.size() == 5:
 			for i in range(5):

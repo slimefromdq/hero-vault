@@ -5,7 +5,7 @@ The app now separates preparation from running games, with a persistent browser-
 ## Pages
 
 - **Home:** inspect the saved team, queue a best-of-three against local rivals, and reopen current or completed games.
-- **Team Builder:** choose the five heroes, two item slots each, lane assignments, squad name, plan and hero assignment. The 18-point budget still applies. Changes are drafts until **Save Team**; switching tabs retains the draft. **Discard edits** reloads the last saved team.
+- **Team Builder:** choose the five heroes, lane assignments, squad name, plan and hero assignment. Items are bought during games from the Remote Shop panel. Changes are drafts until **Save Team**; switching tabs retains the draft. **Discard edits** reloads the last saved team.
 - **Game tabs:** one tab per opponent, containing only the battlefield, queued lineup, combat stats, events, camera controls and game-specific replays. No team-editing controls overlap the game.
 
 Each queue creates three game tabs. Subsequent queues create new sets rather than replacing earlier games. A queued set holds an independent copy of the saved lineup and settings. Editing or saving a team never changes an already queued game.

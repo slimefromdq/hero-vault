@@ -7,30 +7,23 @@ title: Items
 
 [Overview](./) · [Heroes](heroes.html) · [Systems](systems.html) · [Items](items.html) · [Roadmap](roadmap.html) · [Agent Handoff](agent-handoff.html)
 
-Teams share an **18-point** budget; each hero has two distinct slots. An item earns its place when it asks an interesting statistical question or creates a fun visible event.
+Items are bought **during a match** from a team-based remote shop with shared credits. They don't appear instantly: your team's **courier drone** flies each one from the vault to the hero, one delivery at a time, and must return home between trips. An item earns its place when it asks an interesting statistical question or creates a fun visible event.
 
-## Implemented items
+## Prototype shop items
 
-| Item | Cost | Question it asks |
+| Item | Cost | Effect |
 |---|---:|---|
-| Last Stand Shield | 2 | How many deaths does a one-time shield actually prevent? |
-| Execution Blade → Headsman's Axe | 3 | Does finishing power snowball after three kills? |
-| First Hit Hammer → Opening Sledge | 2 | Who benefits most from opening trades? |
-| Revenge Armor | 2 | Do rivalries flip? |
-| Kill Streak Crown | 3 | How long do streaks last? |
-| Coward's Boots | 1 | Do escapes turn into survivals? |
-| Bodyguard Vest → Shield Wall Vest | 2 | How much damage does standing next to a weaker ally save? |
-| Glass Cannon | 2 | Is the damage worth the fragility? |
-| Lucky Coin → Two-Headed Coin | 1 | Is a late-game gamble worth 1 point? |
-| Ambush Shield | 2 | How many deaths does burst protection prevent? |
-| Invisible Cloak | 3 | Does a better approach produce enough successful ganks to justify 3 points? |
-| Lane Rations → Hearty Rations | 1 | Does disengaging pay off over time? |
-| Scout Pin | 1 | Is it worth a slot just to counter cloaks? |
-| Tempered Sole → Tempered Greaves | 1 | Do faster retreats reduce deaths? |
+| Power Cell | 250 | +20 Power |
+| Vital Plate | 200 | +100 Max HP |
+| Swift Treads | 150 | +2 Move Speed |
 
-## Evolution
+These three test items prove the purchase → delivery → inventory loop. The earlier pre-match items (Last Stand Shield, Lucky Coin, Invisible Cloak and others) and their evolutions were removed on 2026-09-17. Full rules: [docs/SHOP_AND_DRONE.md](docs/SHOP_AND_DRONE.md).
 
-Six items evolve **once**, with an announcement, at a visible threshold: a hero level, a number of activations, kills, damage prevented or retreats. No slow +0.2-per-creep treadmill. Details: [docs/CONTENT.md](docs/CONTENT.md).
+## Delivery questions
+
+- How long does an upgrade take to reach a hero far from base?
+- How often do deliveries abort because the target died?
+- Does buying for a frontline hero pay off faster than buying for a roamer?
 
 ## World objects
 

@@ -17,7 +17,7 @@ func _init() -> void:
 		for i in range(5):
 			team.append(pool.pop_at(rng.randi_range(0, pool.size()-1)))
 		var b = Battle.new()
-		b.setup(1000+g, g%3, 0, g%3, team, Catalog.DEFAULT_ITEMS)
+		b.setup(1000+g, g%3, 0, g%3, team)
 		while b.winner == -1 and b.clock < 1200:
 			b.step()
 		unfinished += 1 if b.winner == -1 else 0

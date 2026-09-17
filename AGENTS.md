@@ -96,13 +96,13 @@ Fill these in only after inspecting the actual repository.
 | Default branch | `main` |
 | Main game entry point | `project.godot` -> `scenes/main.tscn` |
 | Hero data location | `scripts/catalog.gd` (data); `scripts/hero_kits.gd` (per-hero abilities, ultimates, AI quirks) |
-| Item data location | `scripts/catalog.gd` (costs, text, `evolve` blocks); item rules in `scripts/battle.gd` |
+| Item data location | `scripts/shop_catalog.gd` (in-match shop items); purchase/queue in `scripts/shop_manager.gd`; delivery in `scripts/courier_drone.gd`; stats in `scripts/hero_inventory.gd`; credits in `scripts/team_economy.gd` (see `docs/SHOP_AND_DRONE.md`) |
 | Simulation/combat core | `scripts/battle.gd` |
 | UI/spectator layer | `scripts/app_shell.gd`, `scripts/battle_view.gd` |
 | Automated tests | `tests/*_test.gd` |
 | Formatting/lint tooling | No configured formatter/linter; use git diff --check |
 | Asset pipeline | Godot imports bundled SVG/PNG; custom expression sheets load at runtime (docs/EXPRESSIONS.md) |
-| Save/data compatibility constraints | `user://squad.json`: retired heroes are swapped one-for-one (`Catalog.migrate_team`), retired items become `none`. CSV event IDs are stable (`crown_*` = Double Damage Idol). |
+| Save/data compatibility constraints | `user://squad.json`: retired heroes are swapped one-for-one (`Catalog.migrate_team`), saved pre-match `equipment` is ignored (items are bought in-match since 2026-09-17). CSV event IDs are stable (`crown_*` = Double Damage Idol). |
 
 ### Build / run / test commands
 
@@ -117,7 +117,7 @@ $env:APPDATA = Join-Path $PWD '.local-data\checks\appdata'
 $env:LOCALAPPDATA = Join-Path $PWD '.local-data\checks\cache'
 New-Item -ItemType Directory -Force $env:APPDATA,$env:LOCALAPPDATA | Out-Null
 & $godotExe --headless --path . --script res://tests/roster_items_test.gd
-# Other headless checks: rework, battle, navigation, map, duel, jungle, handoff, session, expression, expression_editor, pacing.
+# Other headless checks: courier, rework, battle, navigation, map, duel, jungle, handoff, session, expression, expression_editor, pacing.
 # display_test.gd needs a real display (xvfb-run works on Linux). No formatter/linter is configured.
 # Balance snapshot over random squads:
 $env:N=45
@@ -136,7 +136,7 @@ Keep this section synchronized with the repository. Prefer a short map of archit
 /
 |-- project.godot, play.ps1    # game entry and launcher
 |-- scenes/                  # main scene
-|-- scripts/                 # catalog, simulation, hero kits, navigation and presentation
+|-- scripts/                 # catalog, simulation, hero kits, shop/drone logistics, navigation and presentation
 |-- assets/                  # SVG hero portraits, expression sheets, Godot import settings
 |-- tests/                   # GDScript checks
 |-- tools/                   # balance probe
@@ -270,7 +270,7 @@ In the code (`battle.grant_xp`, `Catalog.GROWTH`):
 - XP needed for the next level = `level × 6`; creep 1, hero takedown 3, jungle camp 6.
 - Each level adds that hero's flat HP × 1.4 and basic damage. Starting HP also uses the 1.4 match pacing multiplier.
 - Ability numbers scale with level inside `hero_kits.gd`; there are no unlock points. Yellow Colony grows every two levels.
-- Level 13 is a hard cap (`Catalog.MAX_LEVEL`). Items do not change progression; Lucky Coin and Lane Rations evolve at levels 13 and 9.
+- Level 13 is a hard cap (`Catalog.MAX_LEVEL`). Items do not change progression.
 
 When changing progression, update simulations/tests that assume the cap.
 
@@ -424,38 +424,36 @@ Never leave the next agent with “continue where I left off” and no coordinat
 ## 13. Session Handoff
 
 ### Current objective
-Development Cycle 001: Make Matches Breathe (2026-09-17), implemented and validated. Kept **three lanes**, as explicitly requested after the attached proposal suggested two.
+Remote shop + courier drone rework (2026-09-17). Implemented and validated. It replaces the placeholder pre-match item budget. Previous handoff (Development Cycle 001: Make Matches Breathe) is summarized in `docs/DESIGN.md`.
 
 ### What changed
-- Expanded all travel coordinates by 2.5×; outer lanes are 2,075 units, mid approximately 1,491. Lane IDs, deployment and saved assignments remain unchanged.
-- Waves every 30s: two durable melee and two ranged creeps per lane/team, plus siege every third wave. Creeps scale gradually with match time; siege creeps do 3.5× structure damage.
-- Towers have 4,200 HP / 300 range, always target supported waves first, and punish exposed heroes. Vaults have 14,000 HP. Pre-overtime structure damage is 0.20×; unsupported heroes do a further 0.15×. Existing overtime still starts at 12 minutes; victory requires vault destruction.
-- Match HP and HP growth are 1.4× catalog values. Respawns take 16–45s. Heroes reassess danger every 0.3s, retreat to recover to 80% HP, follow waves and wait outside unsupported tower range. Pursuit, dueling, waveclear, protection and roaming ratings affect choices. Decision transitions are exported.
-- Added one off-lane Central Power Node, using existing camp infrastructure: activates around 4 minutes, 2,400 HP, 45 retaliation damage, teamwide 12 XP and 90s of empowered wave spawns (+40% HP, +60% structure damage). Returns 180s after capture. Up to three eligible heroes per team can contest; enemies near the node fight. Existing small camps, Idol, items, kits and art assets remain.
-- Spectator camera fits the enlarged map, with consistent field radii and click selection, creep-role/empowerment markings, objective countdowns and phase/buff labels. Replay snapshots include empowerment deadlines.
-- Added pacing regression tests, retained all three-lane routing/save checks, and made the balance probe report seeds, objective captures and unfinished matches using current default deployment.
+- **Removed** the 18-point pre-match budget, all 14 items, item evolution, Team Builder item slots and all item rules (execution, first hit, coin, cloak/invisibility, scout, rations, sole, bodyguard, glass, revenge, kill streak, ambush, last stand, coward) from `battle.gd`, `catalog.gd`, `loadout_panel.gd`, `app_shell.gd` and tests. `Catalog.validate(team)` now takes only the team. `Battle.setup(seed, plan, assignment, rival, team, orders)` and `MatchSession.setup(number, name, team, lanes, plan, assignment)` lost their equipment parameter. Old saves' `equipment` is ignored.
+- **Added** `team_economy.gd`, `shop_catalog.gd`, `shop_manager.gd`, `courier_drone.gd`, `hero_inventory.gd`. `battle.gd` owns one economy, shop and drone per team, ticks them in `update_logistics` (before the intermission freeze, so deliveries continue), pays bounties on deaths, and includes `logistics` in frames and snapshots.
+- Three prototype items: Power Cell (+20 Power), Vital Plate (+100 Max HP), Swift Treads (+2 Move Speed). HeroInventory applies bonuses as reconciled deltas, so Mexai's Pilfer moves a stolen item's stats to him and back.
+- Game page: the bottom panel is now the hero-centric **Remote Shop** (selected hero stats, inventory, credits, three buy buttons, purchase/ETA feedback). The left panel shows persistent **drone status** (state, cargo, target, queue). Drones are drawn on the map as diamonds with a line to their target.
+- Red team auto-buys through the same shop.
 
 ### Files changed
-- `scripts/map_layout.gd`, `scripts/battle.gd`, `scripts/battle_view.gd`, `scripts/app_shell.gd`
-- `tests/pacing_test.gd`, `tests/pacing_test.gd.uid`, `tests/map_test.gd`, `tests/duel_test.gd`, `tests/battle_test.gd`, `tools/balance_probe.gd`
-- `README.md`, `docs/DESIGN.md`, `docs/CONTENT.md`, `systems.md`, `AGENTS.md`
+- New: `scripts/team_economy.gd`, `scripts/shop_catalog.gd`, `scripts/shop_manager.gd`, `scripts/courier_drone.gd`, `scripts/hero_inventory.gd`, `tests/courier_test.gd`, `docs/SHOP_AND_DRONE.md`
+- Modified: `scripts/battle.gd`, `scripts/catalog.gd`, `scripts/hero_kits.gd`, `scripts/match_session.gd`, `scripts/app_shell.gd`, `scripts/loadout_panel.gd`, `scripts/battle_view.gd`, `tools/balance_probe.gd`, `tests/roster_items_test.gd`, `tests/rework_test.gd`, `tests/navigation_test.gd`, `tests/session_test.gd`
+- Docs: `README.md`, `AGENTS.md`, `items.md`, `systems.md`, `roadmap.md`, `docs/CONTENT.md`, `docs/DESIGN.md`, `docs/TABBED_UI.md`
 
 ### Validation run
-- Headless focused checks: pacing, map, roster_items, rework, duel, jungle, handoff, navigation, expression and expression_editor pass. Player saves isolated under `.local-data/breathe/`.
-- Real-display test passes fullscreen/F11/follow/overview behavior. Rendered overview inspected; phase-label and camp-marker overlaps corrected. Final early/midgame captures are under `.local-data/breathe/`.
-- During tuning, six randomized squads (seeds 1000–1005, 0.28 pre-overtime structure damage) all finished in 727.3–1119.1s with 2–3 node captures per match. This is a small pacing sample, not balance approval.
-- Final queued-session check passes: all three games finish by vault destruction in 741.65, 922.45 and 742.00s; replay buffers remain bounded and completion stops the session.
-- Final standard nine-match duration sweep passes: 696.6–1150.2 simulated seconds (11:37–19:10), all ending in vault destruction, all with 1–3 node captures. Starter lineup wins 2/9; no roster balance claim. Fixed-seed state/event reproducibility and bounded replay checks pass.
-- All 12 headless checks plus the real-display check pass. `git diff --check` passes. Final duration logs: `.local-data/breathe/battle-verified.log` and `.local-data/breathe/session-verified.log`.
+Run on Linux with Godot 4.7.2 headless, each test with its own HOME, on 2026-09-17:
+- New `courier` test passes. It covers all 13 acceptance steps (immediate charge, no stats before arrival, departure, handoff, +20 Power, return, queued second order, pickup after return, death abort without refund, idle wait while target is dead, retry after respawn, +100 Max HP, +2 Speed), plus validation (unaffordable, enemy hero, unknown item, slot reservation, match over), FIFO with dead-target skipping, snapshot copies, a live-match delivery and rival auto-buy.
+- `roster_items`, `rework`, `navigation`, `map`, `duel`, `jungle`, `handoff`, `session`, `expression`, `expression_editor`, `pacing` pass.
+- **`battle` fails 2 checks.** Of the nine standard seeded matches, one (plan 0 vs rival 1, seed 4830) reaches 20:00 without a destroyed vault. It still stalls with rival auto-buy disabled, so the cause is removing the old items (which shifted the tuned pacing and RNG sequence), not the shop. The other eight end in 12:19–16:59. Blue wins 0/9 because the test never buys for blue. Pacing has not been re-tuned.
+- `display` could not be validated here: under Xvfb (no window manager), its fullscreen assertion fails for the untouched baseline too. Run it on Windows. A rendered capture of the game page (shop panel, drone status, drone on map, delivery event) was checked by eye.
 
 ### Known problems / warnings
-- Godot reports `Failed to read the root certificate store` at shutdown; passing checks still exit successfully. Git reports LF-to-CRLF normalization notices.
-- Early tuning exposed 564.1s and 575.5s endings in one standard matchup; final pre-overtime structure damage was reduced from 0.28 to 0.20. These failed intermediate runs are not counted as final validation.
-- Map route fixtures now isolate the traveler so combat retreat/death cannot invalidate a geometry test. Camp and objective combat are covered separately.
-- Crash Test/Sunday follow design sheets; Poppet/Kiln still await final kits. Drone buying and placeholder equipment/art were outside this change.
+- `.uid` files for the six new scripts/tests were generated by headless Godot 4.7.2 and included.
+- `tests/battle_test.gd` duration sweep currently fails on one seed (see above). The likely fix is a pacing re-tune, or starting blue on an auto-buyer in the sweep, once real items exist.
+- Economy numbers and item stats are unbalanced placeholders. Removing the old items changes match outcomes and pacing numbers from Development Cycle 001, and they have not been re-tuned.
+- ETA is an estimate that assumes heroes stay put. Drones fly in straight lines, even over the jungle.
+- Fight story also lists rival deliveries (`DELIVERED / ...`).
 
 ### Next recommended action
-Watch a full match at normal speed and a focused hero view; assess retreat frequency and objective contests before further roster balance changes. Current values and their purposes are documented in `docs/DESIGN.md`.
+Play a set and judge whether delivery time creates meaningful decisions. Then tune credits/income and design real items (components/combination) on top of `shop_catalog.gd`.
 
 ---
 ## 14. Decision Log
@@ -470,11 +468,14 @@ Add entries only for decisions with future consequences.
 | 2026-09-15 | Controlled randomness, including projectile misses, is part of spectator suspense. | Outcomes should remain uncertain and watchable. | Combat/AI/RNG |
 | 2026-09-15 | Items should create statistical questions or entertaining visible outcomes. | Supports HERO//VAULT's viewing-first identity. | Items/stats/UI |
 | 2026-09-15 | Tank-carry superhero (Atlas) is parked and removed from the game. | User request. | Catalog, battle, assets |
-| 2026-09-15 | Items evolve once, at an announced threshold, and only for their owner. | Burst evolution creates spectator events; theft stays temporary. | Catalog `evolve`, battle item rules, UI |
+| 2026-09-15 | Items evolve once, at an announced threshold, and only for their owner. *(Superseded 2026-09-17: evolving pre-match items removed.)* | Burst evolution creates spectator events; theft stays temporary. | Catalog `evolve`, battle item rules, UI |
 | 2026-09-15 | Hero-specific rules live in `hero_kits.gd` as static functions. | Keeps `battle.gd` generic without a battle↔kit reference cycle. | Simulation architecture |
 | 2026-09-16 | Stability (1–10) scales knockback; lane edges cause wall slams. | Crash Test's design ("worst Stability, built for crashes") and general physical comedy. | battle `knockback`/`wall_slam`, catalog |
 | 2026-09-17 | Retain three lanes, expand travel by 2.5×, strengthen creep waves/towers, add retreat recovery and a four-minute power node. | Development Cycle 001; user explicitly said to keep three lanes. | Map, battle AI, objective, spectator, pacing tests |
 | 2026-09-17 | Add a shorter diagonal mid lane; preserve saved roaming assignment 2 and use 3 for mid. | User requested a third-lane experiment; preserve saves while testing earlier central pressure. | Map, simulation, Team Builder, spectator |
+| 2026-09-17 | Replace the pre-match 18-point item budget (14 items, evolutions) with an in-match remote shop and physical courier-drone delivery. Items never apply instantly; stats apply on handoff. | Core identity: the player supports autonomous heroes through purchase logistics. User chose full removal of the old system. | New logistics scripts, battle, catalog, Team Builder, game UI, tests |
+| 2026-09-17 | One drone per team, one order per trip, FIFO queue; return to base between trips. Dead targets abort the trip and are retried after respawn, with no refund and no loss. Drone is invulnerable and invisible to combat for now. | User spec; limits come from travel time only. | `courier_drone.gd`, `shop_manager.gd` |
+| 2026-09-17 | Rival team shops through the same ShopManager path (deterministic rotation every 25s). | User chose symmetric logistics so the shop is not a one-sided buff. | `shop_manager.gd` |
 | 2026-09-16 | Airborne heroes cannot be targeted or damaged. | FULL SEND must commit without mid-flight interaction. | battle, hero_kits flight |
 
 ---
@@ -491,6 +492,7 @@ Answered from the code (2026-09-15):
 - Statistics: `battle.records` rows, exported with `export_csv`.
 - Levels: `Catalog.MAX_LEVEL = 13`; XP needed per level = `level × XP_PER_LEVEL`.
 - Ultimate timers: per hero (`Catalog.ULTIMATES`); not currently modified by items.
+- Items: bought in-match from a per-team remote shop and flown to heroes by a courier drone (`docs/SHOP_AND_DRONE.md`).
 - Docs site: Jekyll from the repository root.
 
 Still open:

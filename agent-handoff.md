@@ -28,5 +28,5 @@ Every incoming coding agent should:
 - projectiles and charges can plausibly miss;
 - ultimates use long timers/cooldowns;
 - heroes progress through 13 levels;
-- items evolve in visible bursts, not tiny increments;
+- items are bought mid-match and physically delivered by a courier drone, never applied instantly;
 - items should create statistical questions or visible fun.

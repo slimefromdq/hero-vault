@@ -21,7 +21,7 @@ Useful questions for any combat rule:
 
 ## Progression
 
-Heroes level from **1 to 13**. Each level needs `level × 6` XP from nearby creep deaths (1), hero takedowns (3) and jungle camps (6). Each level adds hero-specific HP and damage. Some items evolve at levels 9 or 13.
+Heroes level from **1 to 13**. Each level needs `level × 6` XP from nearby creep deaths (1), hero takedowns (3) and jungle camps (6). Each level adds hero-specific HP and damage.
 
 ## Ultimates
 
@@ -35,9 +35,13 @@ Ranged attacks are real projectiles that can miss moving targets; heroes sideste
 
 Every hero has a Stability rating (1–10) that scales how far knockbacks push them. A hero pushed into the lane edge takes a wall slam (small damage and a brief stun). Crash Test has Stability 1 and is built for crashes.
 
+## Remote shop and courier drone
+
+Each team has shared credits (300 at the start, +2/s, +75 per enemy hero takedown, +6 per enemy creep death), a remote shop with a FIFO delivery queue, and one courier drone. Buying an item for a selected hero charges credits immediately. The drone (`IDLE_AT_BASE → DELIVERING → HANDOFF → RETURNING`) flies the item to that hero, and stats apply only on handoff. It carries one order and must return to base before the next. If the target dies, the drone aborts and the order waits until the hero respawns. The drone can't be attacked. The rival team buys through the same system. Details: [docs/SHOP_AND_DRONE.md](docs/SHOP_AND_DRONE.md).
+
 ## Statistics and events
 
-Every match records structured events (damage, healing, kills, casts, projectile hits and misses, item activations, thefts, evolutions, cloak reveals and gank outcomes, Idol possession) and exports them as CSV for analysis in R.
+Every match records structured events (damage, healing, kills, casts, projectile hits and misses, purchases, drone departures, aborted and completed deliveries, thefts, Idol possession) and exports them as CSV for analysis in R.
 
 ## Three-lane map
 

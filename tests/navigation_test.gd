@@ -26,7 +26,6 @@ func run() -> void:
 	scene.show_page("home")
 	scene.show_page("team")
 	check(builder.draft_name.text == "Tab Test Squad","Draft survives tab switches")
-	builder.gear = scene.Catalog.DEFAULT_ITEMS.duplicate(true)
 	builder.team = scene.Catalog.DEFAULT_TEAM.duplicate()
 	builder.orders = [0,0,3,1,2]
 	builder.apply()
@@ -39,7 +38,6 @@ func run() -> void:
 	var first = scene.sessions[0]
 	check(first.battles[0].units[2].lane == 2 and not first.battles[0].units[2].roamer, "Queued game honors mid assignment")
 	var frozen_lineup: Array = first.lineup.duplicate()
-	var frozen_equipment: Array = first.equipment.duplicate(true)
 	scene.set_focus(1)
 	scene.focus_zoom = 2.8
 	scene.battle_view.update_camera(0,true)
@@ -56,12 +54,11 @@ func run() -> void:
 	scene._input(key)
 	check(scene.follow_hero == old_focus,"Team-page typing does not trigger game shortcuts")
 	builder.team[2] = "oddity"
-	builder.gear[0] = ["last_stand","coin"]
 	builder.orders[2] = 0
 	builder.plan_choice.select(1)
 	builder.draft_name.text = "Next Squad"
 	builder.apply()
-	check(first.lineup == frozen_lineup and first.equipment == frozen_equipment,"Editing next team cannot mutate queued lineup or items")
+	check(first.lineup == frozen_lineup,"Editing next team cannot mutate queued lineup")
 	check(first.battles[0].units[2].portrait == "eleanor" and first.battles[0].plan == 0,"Already queued game keeps its heroes and strategy")
 	var before: float = first.battles[0].clock
 	scene._process(0.1)
@@ -115,11 +112,12 @@ func run() -> void:
 	var stored = JSON.parse_string(FileAccess.get_file_as_string("user://squad.json"))
 	check(stored.team[2] == "oddity" and stored.squad_name == "Next Squad" and stored.queue_number >= 2,"Saved team and queue counter persist")
 	# Invalid drafts cannot be saved and never poison the saved queue configuration.
-	builder.gear[0] = ["execution","execution"]
+	var saved_team: Array = scene.team.duplicate()
+	builder.team[0] = builder.team[1]
 	builder.update_view()
 	check(builder.apply_button.disabled,"Invalid team draft is rejected")
 	builder.apply()
-	check(scene.equipment[0] == ["last_stand","coin"],"Invalid save leaves valid saved composition intact")
+	check(scene.team == saved_team,"Invalid save leaves valid saved composition intact")
 	# Completed sets release capacity; paused sets still count toward the cap.
 	scene.show_page("home")
 	scene.queue_games()

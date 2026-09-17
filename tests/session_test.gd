@@ -3,7 +3,7 @@ const Session = preload("res://scripts/match_session.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 func _init() -> void:
 	var session = Session.new()
-	session.setup(1,"Session smoke test",Catalog.DEFAULT_TEAM,Catalog.DEFAULT_ITEMS,[0,0,1,1,2],0,0)
+	session.setup(1,"Session smoke test",Catalog.DEFAULT_TEAM,[0,0,1,1,2],0,0)
 	for tick in range(24000):
 		session.advance(0.05)
 		if session.finished():

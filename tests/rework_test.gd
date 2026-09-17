@@ -19,67 +19,16 @@ func clean():
 	return b
 func _init() -> void:
 	check(Catalog.validate_definitions() == "", "Roster definitions validate")
-	check(not Catalog.ITEMS.has("idol") and not "idol" in Catalog.ITEM_IDS, "Double Damage Idol is never purchasable")
+	check(not Battle.ShopManager.ITEMS.has("idol"), "Double Damage Idol is never purchasable")
 	for rival in range(3):
-		check(Catalog.validate(Catalog.enemy_team(rival),Catalog.enemy_items(rival)) == "", "Rival equipment fits shared budget")
-	var gear := Catalog.DEFAULT_ITEMS.duplicate(true)
-	gear[0] = ["kill_crown","execution"]
-	check(Catalog.validate(Catalog.DEFAULT_TEAM,gear) != "", "Over-budget rejected")
-	gear[0] = ["last_stand","last_stand"]
-	check(Catalog.validate(Catalog.DEFAULT_TEAM,gear) != "", "Duplicate item rejected")
+		check(Catalog.validate(Catalog.enemy_team(rival)) == "", "Rival squads validate")
+	var dupes: Array = Catalog.DEFAULT_TEAM.duplicate()
+	dupes[1] = dupes[0]
+	check(Catalog.validate(dupes) != "", "Duplicate hero rejected")
 	var b = clean()
 	var a: Dictionary = b.units[0]
 	var t: Dictionary = b.units[5]
-	a.items = ["first_hit"]
-	var hp: float = t.hp
-	b.apply_damage(t,10,a.id,false,"basic")
-	check(t.hp == hp-70, "Hammer first hit gains bonus")
-	hp = t.hp
-	b.apply_damage(t,10,a.id,false,"basic")
-	check(t.hp == hp-10, "Hammer cannot trigger repeatedly")
-	b.clock = 9
-	hp = t.hp
-	b.apply_damage(t,10,a.id,false,"basic")
-	check(t.hp == hp-70, "Hammer refreshes out of combat")
-	t.items = ["last_stand"]
-	t.hp = t.max_hp*0.24
-	b.check_last_stand(t)
-	check(t.shield > 0 and t.last_stand_used, "Last Stand triggers under threshold")
-	t.shield = 0
-	b.check_last_stand(t)
-	check(t.shield == 0, "Last Stand only once per life")
-	a.items = ["execution"]
-	t.items.clear()
-	t.hp = 100
-	b.apply_damage(t,10,a.id)
-	check(t.hp == 84, "Execution amplifies damage below twenty percent")
-	a.items = ["glass"]
-	check(b.power(a) == a.damage+25, "Glass Cannon raises Power")
-	hp = a.hp
-	b.apply_damage(a,100,t.id)
-	check(is_equal_approx(hp-a.hp,120), "Negative Resolve increases incoming damage")
-	a.items = ["bodyguard"]
-	b.units[1].hp = 1
-	hp = a.hp
-	b.apply_damage(a,100,t.id)
-	check(a.hp == hp-75, "Bodyguard reduces damage beside lower current HP ally")
-	a.items = ["coward"]
-	a.hp = a.max_hp*0.2
-	t.pos = a.pos-Vector2(50,0)
-	for i in range(6,10):
-		b.units[i].pos = Vector2(100,420)
-	check(b.movement_speed(a,a.pos+Vector2(10,0)) == a.speed*1.5, "Boots reward fleeing enemy")
-	check(b.movement_speed(a,a.pos-Vector2(10,0)) == a.speed, "Boots do not reward pursuit")
-	a.items = ["revenge"]
-	t.items = ["kill_crown"]
-	b.apply_damage(a,99999,t.id)
-	check(t.kill_streak == 1 and t.id in a.revenge_targets, "Death establishes rivalry and kill streak")
-	a.hp = a.max_hp
-	hp = a.hp
-	b.apply_damage(a,140,t.id)
-	check(is_equal_approx(a.hp,hp-100), "Revenge defense applies against killer")
-	b.apply_damage(t,99999,a.id)
-	check(t.kill_streak == 0 and t.id not in a.revenge_targets, "Revenge ends on kill; crown resets on death")
+	var hp: float
 	b = clean()
 	var irene: Dictionary = b.units[1]
 	t = b.units[5]
@@ -107,15 +56,24 @@ func _init() -> void:
 	b.heal(t,t,100)
 	check(is_equal_approx(t.hp-enemy_hp,65) and is_equal_approx(irene.hp-hp,35), "Blood Rush redirects enemy healing")
 	var mexai: Dictionary = b.units[4]
-	t.items = ["glass"]
+	t.items = ["power_cell"]
+	var Inventory = Battle.HeroInventory
+	Inventory.refresh(b,t)
+	var owner_power: float = t.damage
+	var thief_power: float = mexai.damage
 	b.steal(mexai,t,false)
-	check(not b.has_item(t,"glass") and b.has_item(mexai,"glass"), "Pilfer disables owner item and grants thief its effect")
+	Inventory.refresh(b,t)
+	Inventory.refresh(b,mexai)
+	check(not b.has_item(t,"power_cell") and b.has_item(mexai,"power_cell"), "Pilfer disables owner item and grants thief its effect")
+	check(t.damage == owner_power-20 and mexai.damage == thief_power+20, "Stolen stat bonus moves to the thief")
 	b.clock += 9
 	b.update_loans()
-	check(b.has_item(t,"glass") and not b.has_item(mexai,"glass"), "Stolen item returns on expiry")
+	Inventory.refresh(b,t)
+	Inventory.refresh(b,mexai)
+	check(b.has_item(t,"power_cell") and not b.has_item(mexai,"power_cell") and t.damage == owner_power and mexai.damage == thief_power, "Stolen item returns on expiry")
 	b.steal(mexai,t,false)
 	b.apply_damage(mexai,99999,t.id)
-	check(b.thefts.is_empty() and b.has_item(t,"glass"), "Thief death returns item")
+	check(b.thefts.is_empty() and b.has_item(t,"power_cell"), "Thief death returns item")
 	var oddity := b.make_unit("Oddity",0,"oddity",Vector2(500,80),430,26,210,0)
 	oddity.cast_effect = "oddity"
 	var irene_pos: Vector2 = irene.pos
@@ -165,22 +123,6 @@ func _init() -> void:
 	hp = t.hp
 	b.update_melee(0.5)
 	check(t.hp == hp and b.records[-1].kind == "melee_miss", "Leaving range evades a committed melee swing")
-	irene = b.units[1]
-	irene.items = ["coin"]
-	var rolls: Array = []
-	for i in range(100):
-		t.hp = t.max_hp
-		hp = t.hp
-		b.apply_damage(t,10,irene.id,false,"basic")
-		rolls.append(hp-t.hp)
-	check(rolls.has(30.0) and rolls.has(10.0), "Lucky Coin produces normal and triple hits")
-	var second = clean()
-	second.units[1].items = ["coin"]
-	for i in range(100):
-		second.units[5].hp = second.units[5].max_hp
-		hp = second.units[5].hp
-		second.apply_damage(second.units[5],10,1,false,"basic")
-		check(hp-second.units[5].hp == rolls[i], "Coin sequence reproducible by seed")
 	b = clean()
 	eleanor = b.units[2]
 	irene = b.units[1]
@@ -193,7 +135,7 @@ func _init() -> void:
 	for i in range(5,10):
 		b.units[i].pos = mexai.pos+Vector2(25,0)
 		b.units[i].lane = mexai.lane
-		b.units[i].items = ["coin"]
+		b.units[i].items = ["swift_treads"]
 	mexai.cast_effect = "mexai"
 	b.resolve_ultimate(mexai,b.units[5])
 	for i in range(30):

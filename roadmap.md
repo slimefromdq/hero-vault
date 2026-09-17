@@ -14,11 +14,11 @@ This page should stay short and current.
 - Tabbed app, three-game sets, character expressions.
 - Poppet, Crash Test, Kiln and Sunday. Crash Test and Sunday follow their design sheets.
 - Stability, knockback and wall collisions.
-- Ambush Shield, Invisible Cloak, Lane Rations, Scout Pin, Tempered Sole.
-- One-time burst evolution for six items.
+- In-match remote shop with a physical courier drone, delivery queue and death-safe retries (replaced the pre-match item budget).
 
 ## Next
 
+- Real shop items (combining, components, upgrades), then queue reordering, courier threats and drone upgrades.
 - Final designs for Poppet and Kiln; tune numbers with `tools/balance_probe.gd`.
 - Spectator world objects beyond the Idol (for example Cooldown Shard, Treasure Goblin), with about three active per match.
 - Match history for important objects (holders, time held, kills while held).

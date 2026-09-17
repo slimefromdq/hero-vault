@@ -1,12 +1,16 @@
 # hero//vault
 
-A Godot 4.7.2 MOBA autobattler and spectator simulation. Choose five heroes, assign lanes and spend a shared 18-point item budget. Deploy across north, south and mid lanes, or assign a jungle roamer. Watch three autonomous battles and win two of three.
+> **Latest update (2026-09-17):** Items are now bought during matches from a team-based remote shop and physically delivered by a courier drone. The pre-match 18-point item budget and its 14 items were removed. See [docs/SHOP_AND_DRONE.md](docs/SHOP_AND_DRONE.md).
+
+A Godot 4.7.2 MOBA autobattler and spectator simulation. Choose five heroes and assign lanes, then support them mid-match by buying items that a courier drone flies across the map. Deploy across north, south and mid lanes, or assign a jungle roamer. Watch three autonomous battles and win two of three.
 
 ## Play
 
 Run `./play.ps1` (it uses `-GodotPath`, the `GODOT` environment variable, or `godot` on your PATH), or import `project.godot` into Godot 4.7.2 and press F5. The launcher keeps saves under `.local-data/`.
 
-Use the **Team Builder** tab to choose heroes, items, lanes and strategy, then **Save Team**. Return **Home** and choose **Queue 3 Games**. The starter lineup costs **17/18** points, with two distinct item slots per hero. Hover an item to see what it evolves into.
+Use the **Team Builder** tab to choose heroes, lanes and strategy, then **Save Team**. Return **Home** and choose **Queue 3 Games**.
+
+During a game, select one of your heroes (click, or 1–5) and use the **Remote Shop** panel to buy an item for that hero with shared team credits. Credits are spent immediately, but the item only arrives when your **courier drone** reaches the hero. The drone must return to the vault between deliveries, and later purchases wait in its queue. If the target dies, the drone turns back and retries after the respawn. Nothing is lost. The left panel shows the drone's state, cargo, target and queue.
 
 F11 toggles fullscreen. Click a hero or press 1–5 to follow; scroll to zoom; 0/Escape restores the overview. Each game gets its own tab and keeps running while you build your next team. Pause/speed controls affect only that queued set. See [navigation notes](docs/TABBED_UI.md).
 
@@ -14,18 +18,19 @@ F11 toggles fullscreen. Click a hero or press 1–5 to follow; scroll to zoom; 0
 
 ## Content
 
-Ten heroes: Hazmat, Irene, Oddity, Mexai, Eleanor, Yellow Colony, **Poppet**, **Crash Test**, **Kiln** and **Sunday**. Fourteen items, including **Ambush Shield**, **Invisible Cloak** and three 1-point items (Lane Rations, Scout Pin, Tempered Sole). Six items **evolve** once into a stronger named version at a visible threshold. The Double Damage Idol is a jungle pickup, never a purchasable item.
+Ten heroes: Hazmat, Irene, Oddity, Mexai, Eleanor, Yellow Colony, **Poppet**, **Crash Test**, **Kiln** and **Sunday**. The remote shop currently sells three prototype items: **Power Cell** (+20 Power), **Vital Plate** (+100 Max HP) and **Swift Treads** (+2 Move Speed). The Double Damage Idol is a jungle pickup and is never sold.
 
 All three lanes remain, on a map with 2.5× longer travel distances. Durable melee and ranged waves arrive every 30 seconds, joined by siege creeps every third wave. Heroes follow waves, retreat to recover, and wait for creep support before pushing towers. The off-lane Central Power Node appears at four minutes and rewards its captors with team XP and empowered waves. Existing camps and the Double Damage Idol remain. Matches target roughly 12–20 minutes; overtime begins at 12 minutes. Saved lane assignments are preserved. See [match structure](docs/DESIGN.md#development-cycle-001-make-matches-breathe).
 
 Heroes have a Stability stat: knockbacks scale with it, and heroes knocked into the lane edge take a wall slam. Full kits, numbers and evolution rules: [docs/CONTENT.md](docs/CONTENT.md). Design direction: [docs/DESIGN.md](docs/DESIGN.md).
 
-Old saves keep their progression. Retired heroes are swapped one-for-one for unused current heroes, and retired equipment becomes empty slots.
+Old saves keep their progression. Retired heroes are swapped one-for-one for unused current heroes, and saved pre-match equipment is ignored.
 
 ## Project structure
 
-- `scripts/catalog.gd`: hero stats, behavior ratings, ultimates, items and evolutions, rival squads, validation and save migration.
-- `scripts/battle.gd`: seeded fixed-step simulation (movement, damage, items, objectives) and CSV event export.
+- `scripts/catalog.gd`: hero stats, behavior ratings, ultimates, rival squads, validation and save migration.
+- `scripts/team_economy.gd`, `scripts/shop_catalog.gd`, `scripts/shop_manager.gd`, `scripts/courier_drone.gd`, `scripts/hero_inventory.gd`: team credits, shop items, purchases and delivery queue, the courier drone, and hero inventories.
+- `scripts/battle.gd`: seeded fixed-step simulation (movement, damage, objectives, shop logistics) and CSV event export.
 - `scripts/hero_kits.gd`: per-hero signature abilities, ultimates and AI quirks.
 - `scripts/map_layout.gd`: shared map geometry.
 - `scripts/battle_view.gd`: battlefield drawing and spectator camera.
@@ -45,6 +50,6 @@ Run each test with a separate user-data directory so UI tests don't overwrite yo
 godot --headless --path . --script res://tests/NAME_test.gd
 ```
 
-Headless tests: `roster_items`, `rework`, `battle`, `navigation`, `map`, `duel`, `jungle`, `handoff`, `session`, `expression`, `expression_editor`, `pacing`. `display` needs a real window. Balance snapshot: `N=45 godot --headless --path . --script res://tools/balance_probe.gd`.
+Headless tests: `courier`, `roster_items`, `rework`, `battle`, `navigation`, `map`, `duel`, `jungle`, `handoff`, `session`, `expression`, `expression_editor`, `pacing`. `display` needs a real window. Balance snapshot: `N=45 godot --headless --path . --script res://tools/balance_probe.gd`.
 
 Online matchmaking, authored animation, spectator world objects, advanced AI, generalized Stability and an R dashboard remain future work.

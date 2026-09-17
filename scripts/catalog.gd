@@ -1,11 +1,11 @@
 extends RefCounted
-## Hero, item and rival data. Simulation rules live in battle.gd / hero_kits.gd.
+## Hero and rival data. Shop items live in shop_catalog.gd. Simulation rules live in battle.gd / hero_kits.gd.
 ## IDs are stable save/CSV keys; change display names instead of IDs.
 
 const MAX_LEVEL := 13
 const XP_PER_LEVEL := 6
 const TEAM_SIZE := 5
-const ITEM_BUDGET := 18
+const ShopCatalog = preload("res://scripts/shop_catalog.gd")
 
 # Behavior ratings (1-5) are AI heuristics, never hidden damage bonuses.
 const BEHAVIOR_KEYS := ["retreat", "pursuit", "roaming", "dueling", "waveclear", "siege", "protection"]
@@ -68,7 +68,7 @@ const HEROES := {
 	"mexai": {"name": "Mexai", "category": "Fantasy", "role": "Roamer / Item thief", "personality": "Impulsive / Opportunistic",
 		"hp": 355, "damage": 21, "reach": 48, "speed": 62, "armor": 7.0, "resolve": 7.0, "interval": 0.7, "windup": 0.12, "projectile": 0.0, "stability": 2,
 		"kit": "Shiv / Pilfer / Grand Larceny",
-		"description": "Fast melee. Pilfer temporarily takes an equipped item and disables it on its owner. Grand Larceny dashes between nearby enemies to damage and steal. Chases valuables but flees danger quickly."},
+		"description": "Fast melee. Pilfer temporarily takes a delivered item and disables it on its owner. Grand Larceny dashes between nearby enemies to damage and steal. Chases valuables but flees danger quickly."},
 	"eleanor": {"name": "Eleanor", "category": "Fantasy", "role": "Protector tank", "personality": "Stern / Protective",
 		"hp": 720, "damage": 48, "reach": 62, "speed": 39, "armor": 40.0, "resolve": 30.0, "interval": 2.1, "windup": 0.6, "projectile": 0.0, "stability": 8,
 		"kit": "Greatsword / Intercede / Hold the Line",
@@ -96,91 +96,21 @@ const HEROES := {
 		"description": "Slow, heavy Sunbeam bolts with a small splash; you can watch them miss. Warmth heals nearby allies and adds Resolve, and she walks toward wounded allies to use it. Flare is a painfully slow solar orb that explodes, burns and knocks back. BEAUTIFUL DAY creates a huge stationary sun zone that heals allies and burns enemies."},
 }
 
-# Evolving items change into a stronger named version once, at a visible threshold.
-# trigger: level (holder level), procs (item activations), kills (hero kills while held),
-# blocked (damage prevented), retreats (retreat boosts used).
-const ITEM_IDS := ["none", "last_stand", "execution", "first_hit", "revenge", "kill_crown", "coward", "bodyguard", "glass", "coin",
-	"ambush", "cloak", "rations", "scout", "sole"]
-const EVOLVE_TRIGGERS := ["level", "procs", "kills", "blocked", "retreats"]
-
-const ITEMS := {
-	"none": {"name": "Empty", "cost": 0, "description": "Leave this slot empty."},
-	"last_stand": {"name": "Last Stand Shield", "cost": 2,
-		"description": "Below 25% HP, gain a shield worth 35% maximum HP for 5 seconds. Once per life; lethal hits cannot trigger it after death."},
-	"execution": {"name": "Execution Blade", "cost": 3,
-		"description": "Deal 60% more damage to enemy heroes already below 20% HP.",
-		"evolve": {"name": "Headsman's Axe", "trigger": "kills", "at": 3, "summary": "Execute threshold rises to 30% HP."}},
-	"first_hit": {"name": "First Hit Hammer", "cost": 2,
-		"description": "First basic hit against each enemy hero deals +60 damage. Refreshes after 8 seconds without exchanging damage with that hero.",
-		"evolve": {"name": "Opening Sledge", "trigger": "procs", "at": 5, "summary": "+100 first-hit damage and a 0.4s stagger."}},
-	"revenge": {"name": "Revenge Armor", "cost": 2,
-		"description": "After an enemy hero kills you, gain +40 Armor and Resolve against that specific hero until you kill them. Rivalries survive respawn."},
-	"kill_crown": {"name": "Kill Streak Crown", "cost": 3,
-		"description": "Gain +8 Power per consecutive hero kill. All stacks are lost on death. Separate from the jungle Idol."},
-	"coward": {"name": "Coward's Boots", "cost": 1,
-		"description": "Below 30% HP, gain 50% movement speed while moving away from the nearest visible enemy hero within 240 range."},
-	"bodyguard": {"name": "Bodyguard Vest", "cost": 2,
-		"description": "Take 25% less damage while within 120 range of a living allied hero with lower current HP than you.",
-		"evolve": {"name": "Shield Wall Vest", "trigger": "blocked", "at": 400, "summary": "Damage reduction rises to 35%."}},
-	"glass": {"name": "Glass Cannon", "cost": 2,
-		"description": "+25 Power, -25 Armor and Resolve. Negative defenses increase damage taken."},
-	"coin": {"name": "Lucky Coin", "cost": 1,
-		"description": "Basic attacks have a seeded 8% chance to deal triple damage. Rolls on a connected hit, once per swing.",
-		"evolve": {"name": "Two-Headed Coin", "trigger": "level", "at": 13, "summary": "Triple-damage chance rises to 14%."}},
-	"ambush": {"name": "Ambush Shield", "cost": 2,
-		"description": "Losing 30% maximum HP within 2 seconds grants a shield worth 30% maximum HP for 3 seconds. 20s cooldown."},
-	"cloak": {"name": "Invisible Cloak", "cost": 3,
-		"description": "When starting a jungle rotation or closing in on a distant enemy hero, become unseen by enemies for 6s. Attacking, taking damage, or coming within 60 range of an enemy hero reveals you. 30s cooldown."},
-	"rations": {"name": "Lane Rations", "cost": 1,
-		"description": "After 6s without taking hero damage, recover 4 HP per second (+0.4 per level).",
-		"evolve": {"name": "Hearty Rations", "trigger": "level", "at": 9, "summary": "Starts after 4s and heals twice as fast."}},
-	"scout": {"name": "Scout Pin", "cost": 1,
-		"description": "Checks for hidden enemy heroes within 260 range and reveals them. 10s cooldown after a reveal."},
-	"sole": {"name": "Tempered Sole", "cost": 1,
-		"description": "When beginning a natural retreat, gain 40% movement speed for 2.5s. 12s cooldown.",
-		"evolve": {"name": "Tempered Greaves", "trigger": "retreats", "at": 4, "summary": "The boost lasts 4s and gives 55% movement speed."}},
-}
-
 const DEFAULT_TEAM := ["hazmat", "irene", "eleanor", "colony", "mexai"]
-const DEFAULT_ITEMS := [["last_stand", "revenge"], ["execution", "coin"], ["bodyguard", "last_stand"], ["first_hit", "none"], ["glass", "coward"]]
 
 const RIVAL_TEAMS := [
 	["hazmat", "irene", "eleanor", "colony", "oddity"],
 	["crash_test", "hazmat", "mexai", "sunday", "irene"],
 	["kiln", "poppet", "irene", "oddity", "mexai"],
 ]
-const RIVAL_ITEMS := [
-	[["last_stand", "revenge"], ["execution", "coin"], ["bodyguard", "last_stand"], ["first_hit", "none"], ["glass", "coward"]],
-	[["last_stand", "glass"], ["first_hit", "revenge"], ["coward", "coin"], ["bodyguard", "rations"], ["execution", "none"]],
-	[["execution", "coin"], ["revenge", "last_stand"], ["kill_crown", "none"], ["scout", "ambush"], ["cloak", "coward"]],
-]
-
-static func budget(loadout: Array) -> int:
-	var total := 0
-	for slots in loadout:
-		if slots is Array:
-			for item in slots:
-				if ITEMS.has(item):
-					total += ITEMS[item].cost
-	return total
-
-static func validate(team: Array, loadout: Array) -> String:
-	if team.size() != TEAM_SIZE or loadout.size() != TEAM_SIZE:
-		return "Choose five heroes and five item rows."
+static func validate(team: Array) -> String:
+	if team.size() != TEAM_SIZE:
+		return "Choose five heroes."
 	var seen := []
 	for i in range(TEAM_SIZE):
 		if not HEROES.has(team[i]) or team[i] in seen:
 			return "Each hero can appear only once in your squad."
 		seen.append(team[i])
-		if not loadout[i] is Array or loadout[i].size() != 2:
-			return "Each hero has two item slots."
-		for item in loadout[i]:
-			if not ITEMS.has(item):
-				return "Unknown item."
-		if loadout[i][0] != "none" and loadout[i][0] == loadout[i][1]:
-			return "A hero cannot equip the same item twice."
-	if budget(loadout) > ITEM_BUDGET:
-		return "Over budget: %d / %d points. Remove or replace an item." % [budget(loadout), ITEM_BUDGET]
 	return ""
 
 ## Keeps a saved roster usable after heroes are retired: unknown or duplicate
@@ -199,26 +129,6 @@ static func migrate_team(saved: Array) -> Array:
 
 static func enemy_team(rival: int) -> Array:
 	return RIVAL_TEAMS[rival].duplicate()
-
-static func enemy_items(rival: int) -> Array:
-	return RIVAL_ITEMS[rival].duplicate(true)
-
-static func item_name(id: String, evolved: bool) -> String:
-	return ITEMS[id].evolve.name if evolved and ITEMS[id].has("evolve") else ITEMS[id].name
-
-static func item_tooltip(id: String) -> String:
-	var data: Dictionary = ITEMS[id]
-	if not data.has("evolve"):
-		return data.description
-	var evolve: Dictionary = data.evolve
-	var condition: String = {
-		"level": "at hero level %d",
-		"procs": "after %d activations",
-		"kills": "after %d hero kills while held",
-		"blocked": "after preventing %d damage",
-		"retreats": "after %d boosted retreats",
-	}[evolve.trigger] % evolve.at
-	return "%s\nEVOLVES %s into %s: %s" % [data.description, condition, evolve.name, evolve.summary]
 
 static func behavior(id: String) -> Dictionary:
 	var result := {}
@@ -242,16 +152,9 @@ static func validate_definitions() -> String:
 	for id in ULTIMATES:
 		if not HEROES.has(id) or ULTIMATES[id].cooldown < 45:
 			return "Invalid ultimate cooldown"
-	if ITEM_IDS.size() != ITEMS.size():
-		return "Item IDs must be unique and complete"
-	for id in ITEM_IDS:
-		if not ITEMS.has(id):
-			return "Missing item data: " + id
-		if ITEMS[id].has("evolve"):
-			var evolve: Dictionary = ITEMS[id].evolve
-			if evolve.trigger not in EVOLVE_TRIGGERS or evolve.at <= 0 or (evolve.trigger == "level" and evolve.at > MAX_LEVEL):
-				return "Invalid evolution: " + id
+	if ShopCatalog.validate() != "":
+		return ShopCatalog.validate()
 	for rival in range(RIVAL_TEAMS.size()):
-		if validate(RIVAL_TEAMS[rival], RIVAL_ITEMS[rival]) != "":
+		if validate(RIVAL_TEAMS[rival]) != "":
 			return "Invalid rival squad %d" % rival
 	return ""

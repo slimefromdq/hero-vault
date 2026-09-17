@@ -303,7 +303,7 @@ static func flare_target(b, u: Dictionary) -> Dictionary:
 	var best: Dictionary = {}
 	var best_score := 0.0
 	for enemy in b.units:
-		if enemy.team == u.team or enemy.creep or enemy.hp <= 0 or enemy.invisible > 0 or not enemy.flight.is_empty():
+		if enemy.team == u.team or enemy.creep or enemy.hp <= 0 or not enemy.flight.is_empty():
 			continue
 		if u.pos.distance_to(enemy.pos) > u.reach+60:
 			continue
@@ -321,7 +321,7 @@ static func full_send_target(b, u: Dictionary) -> Dictionary:
 	var best: Dictionary = {}
 	var best_score := -INF
 	for enemy in b.units:
-		if enemy.team == u.team or enemy.creep or enemy.hp <= 0 or enemy.invisible > 0 or not enemy.flight.is_empty():
+		if enemy.team == u.team or enemy.creep or enemy.hp <= 0 or not enemy.flight.is_empty():
 			continue
 		var distance: float = u.pos.distance_to(enemy.pos)
 		if distance < 200 or distance > 650:
@@ -433,7 +433,7 @@ static func steal(b, u: Dictionary, enemy: Dictionary, grand: bool) -> void:
 	var slot: int = available[b.rng.randi_range(0, available.size()-1)]
 	var item: String = enemy.items[slot]
 	b.thefts.append({"owner": enemy.id, "thief": u.id, "slot": slot, "item": item, "until": b.clock+8.0})
-	b.log_event("GRAND LARCENY" if grand else "PILFER", u.name+" takes "+Catalog.ITEMS[item].name+" from "+enemy.name+" for 8s.", "theft", u.id)
+	b.log_event("GRAND LARCENY" if grand else "PILFER", u.name+" takes "+b.ShopManager.item_name(item)+" from "+enemy.name+" for 8s.", "theft", u.id)
 	b.record_event("item_stolen", u.id, enemy.id, 8, {"item": item})
 
 static func update_larceny(b, u: Dictionary, dt: float) -> void:
