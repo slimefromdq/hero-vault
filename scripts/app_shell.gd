@@ -1,5 +1,6 @@
 extends Node2D
 ## Persistent navigation shell. Pages own controls; sessions own running games.
+const MapLayout = preload("res://scripts/map_layout.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 const Session = preload("res://scripts/match_session.gd")
 const LoadoutPanel = preload("res://scripts/loadout_panel.gd")
@@ -23,7 +24,7 @@ var font: Font = ThemeDB.fallback_font
 var portraits := {}
 var team: Array = Catalog.DEFAULT_TEAM.duplicate()
 var equipment: Array = Catalog.DEFAULT_ITEMS.duplicate(true)
-var lane_orders: Array = [0,0,1,1,2]
+var lane_orders: Array = MapLayout.DEFAULT_ORDERS.duplicate()
 var squad_name := "The Brave Ones"
 var plan := 0
 var assignment := 0
@@ -479,7 +480,7 @@ func draw_home() -> void:
 		var x := 62+i*98
 		draw_texture_rect(portraits[team[i]],Rect2(x,310,64,64),false)
 		label_at(Catalog.HEROES[team[i]].name.split(" ")[0],Vector2(x,398),12)
-		label_at(["North","South","Roam"][lane_orders[i]],Vector2(x,419),11,MUTED)
+		label_at(["North","South","Roam","Mid"][lane_orders[i]],Vector2(x,419),11,MUTED)
 	label_at("LOCAL RIVALS / BEST OF THREE",Vector2(58,456),12,GREEN)
 	label_at("Queue the saved team. Each game opens in its own tab.",Vector2(58,596),13,MUTED)
 	box(Rect2(26,641,554,204))
@@ -514,7 +515,7 @@ func draw_game() -> void:
 		draw_texture_rect(expressions.texture(u.portrait, expressions.resolve(u, frame.time, frame.winner)),Rect2(42,y,45,45),false)
 		Expressions.draw_fire(self, Rect2(42,y,45,45), u, frame.time)
 		label_at(u.name.left(21),Vector2(98,y+16),14)
-		label_at("L%d / %s" % [u.level,"KO" if u.hp <= 0 else "North" if u.lane == 0 else "South"],Vector2(98,y+34),11,MUTED)
+		label_at("L%d / %s" % [u.level,"KO" if u.hp <= 0 else MapLayout.LANE_NAMES[u.lane]],Vector2(98,y+34),11,MUTED)
 		bar(Rect2(98,y+44,153,4),u.hp/u.max_hp,BLUE)
 	var hero: Dictionary = frame.units[maxi(0,follow_hero)]
 	label_at(hero.name.to_upper().left(22),Vector2(42,610),19,GOLD)
@@ -598,10 +599,10 @@ func load_profile() -> void:
 		if saved_team is Array and saved_items is Array and Catalog.validate(saved_team, saved_items) == "":
 			team = saved_team.duplicate()
 			equipment = saved_items.duplicate(true)
-		var saved_orders = value.get("lane_orders", [0, 0, 1, 1, 2])
+		var saved_orders = value.get("lane_orders", MapLayout.DEFAULT_ORDERS.duplicate())
 		if saved_orders is Array and saved_orders.size() == 5:
 			for i in range(5):
-				lane_orders[i] = clampi(int(saved_orders[i]), 0, 2)
+				lane_orders[i] = clampi(int(saved_orders[i]), 0, MapLayout.MID_ORDER)
 		squad_name = str(value.get("squad_name", squad_name)).left(26)
 		plan = clampi(int(value.get("plan", 0)), 0, 2)
 		assignment = clampi(int(value.get("assignment", 0)), 0, 2)

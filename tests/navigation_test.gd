@@ -28,14 +28,16 @@ func run() -> void:
 	check(builder.draft_name.text == "Tab Test Squad","Draft survives tab switches")
 	builder.gear = scene.Catalog.DEFAULT_ITEMS.duplicate(true)
 	builder.team = scene.Catalog.DEFAULT_TEAM.duplicate()
-	builder.orders = [0,0,1,1,2]
+	builder.orders = [0,0,3,1,2]
 	builder.apply()
+	check(scene.lane_orders[2] == 3 and builder.order_choices[2].selected == 3, "Mid assignment is selectable and saved")
 	check(scene.page == "team" and not builder.is_dirty(),"Saving stays on Team Builder")
 	scene.show_page("home")
 	scene.launch_button.pressed.emit()
 	check(scene.sessions.size() == 1 and scene.open_tabs.size() == 3,"Queue opens three dedicated game tabs")
 	check(scene.page == "game" and scene.game_layer.visible and not builder.visible and not scene.home_layer.visible,"Game view excludes editing and queue controls")
 	var first = scene.sessions[0]
+	check(first.battles[0].units[2].lane == 2 and not first.battles[0].units[2].roamer, "Queued game honors mid assignment")
 	var frozen_lineup: Array = first.lineup.duplicate()
 	var frozen_equipment: Array = first.equipment.duplicate(true)
 	scene.set_focus(1)

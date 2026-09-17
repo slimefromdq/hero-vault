@@ -158,7 +158,22 @@ func draw_terrain() -> void:
 	outer.border_color = Color("66716e")
 	outer.set_border_width_all(2)
 	draw_style_box(outer, Rect2(arena_point(MapLayout.BOUNDS.position), MapLayout.BOUNDS.size*0.82))
-	for lane in range(2):
+	# One contiguous jungle, with small trail entrances for autonomous rotations.
+	var jungle := panel_style(Color("153e2c"), 15)
+	jungle.border_color = Color("729b72")
+	jungle.set_border_width_all(3)
+	draw_style_box(jungle, Rect2(arena_point(MapLayout.JUNGLE.position), MapLayout.JUNGLE.size*0.82))
+	for side in range(2):
+		draw_dashed_line(arena_point(MapLayout.ENTRANCES[side]), arena_point(MapLayout.JUNGLE_CENTER), Color("456c43"), 9, 8)
+	for i in range(23):
+		var point := MapLayout.JUNGLE.position+Vector2(15+(i*53)%190, 20+(i*47)%116)
+		if MapLayout.on_lane(point, 2):
+			continue
+		var center := arena_point(point)
+		draw_circle(center+Vector2(2, 4), 12, Color("112e24"))
+		draw_circle(center, 10+(i%3)*2, [Color("286943"), Color("337d4b"), Color("225c3c")][i%3])
+		draw_line(center, center+Vector2(0, 8), Color("4b6441"), 2)
+	for lane in range(MapLayout.LANE_COUNT):
 		var road := PackedVector2Array()
 		for point in MapLayout.path(lane):
 			road.append(arena_point(point))
@@ -172,20 +187,7 @@ func draw_terrain() -> void:
 			var tangent := MapLayout.forward(point, lane, 0)
 			var center := arena_point(point)
 			draw_line(center-tangent.orthogonal()*27, center+tangent.orthogonal()*27, Color("475050"), 1)
-	# One contiguous jungle, with small trail entrances for autonomous rotations.
-	var jungle := panel_style(Color("153e2c"), 15)
-	jungle.border_color = Color("729b72")
-	jungle.set_border_width_all(3)
-	draw_style_box(jungle, Rect2(arena_point(MapLayout.JUNGLE.position), MapLayout.JUNGLE.size*0.82))
-	for side in range(2):
-		draw_dashed_line(arena_point(MapLayout.ENTRANCES[side]), arena_point(MapLayout.JUNGLE_CENTER), Color("456c43"), 9, 8)
-	for i in range(23):
-		var point := MapLayout.JUNGLE.position+Vector2(15+(i*53)%190, 20+(i*47)%116)
-		var center := arena_point(point)
-		draw_circle(center+Vector2(2, 4), 12, Color("112e24"))
-		draw_circle(center, 10+(i%3)*2, [Color("286943"), Color("337d4b"), Color("225c3c")][i%3])
-		draw_line(center, center+Vector2(0, 8), Color("4b6441"), 2)
-	label_at("JUNGLE", arena_point(Vector2(457, 258)), 14, Color("cef0af"))
+	label_at("MID LANE", arena_point(Vector2(535, 235)), 10, GOLD)
 	label_at("NORTH / WEST LANE", arena_point(Vector2(335, 35)), 10, MUTED)
 	label_at("SOUTH / EAST LANE", arena_point(Vector2(520, 474)), 10, MUTED)
 	# Side landmarks echo the sketch without adding combat objects.

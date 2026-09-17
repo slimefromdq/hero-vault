@@ -353,9 +353,7 @@ static func update_flight(b, u: Dictionary, dt: float) -> void:
 	if t < 1.0:
 		return
 	# Land in whichever lane is closer; the jungle counts as "somewhere unhelpful".
-	var north: Dictionary = MapLayout.project(flight.to, 0)
-	var south: Dictionary = MapLayout.project(flight.to, 1)
-	u.lane = 0 if north.distance <= south.distance else 1
+	u.lane = MapLayout.nearest_lane(flight.to)
 	u.pos = MapLayout.constrain(flight.to, u.lane)
 	u.flight = {}
 	var travel: float = minf(flight.distance, 600.0)

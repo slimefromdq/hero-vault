@@ -10,6 +10,8 @@ func _init() -> void:
 	b.setup(47, 0, 0, 0)
 	var u: Dictionary = b.units[1]
 	var enemy: Dictionary = b.units[5]
+	u.lane = 0
+	enemy.lane = 0
 	u.pos = Vector2(600, 80)
 	enemy.pos = Vector2(440, 80)
 	var start: Vector2 = u.pos

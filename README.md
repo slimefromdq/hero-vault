@@ -1,6 +1,6 @@
 # hero//vault
 
-A Godot 4.7.2 MOBA autobattler and spectator simulation. Choose five heroes, assign lanes and spend a shared 18-point item budget. Watch three autonomous battles and win two of three.
+A Godot 4.7.2 MOBA autobattler and spectator simulation. Choose five heroes, assign lanes and spend a shared 18-point item budget. Deploy across north, south and mid lanes, or assign a jungle roamer. Watch three autonomous battles and win two of three.
 
 ## Play
 
@@ -15,6 +15,8 @@ F11 toggles fullscreen. Click a hero or press 1–5 to follow; scroll to zoom; 0
 ## Content
 
 Ten heroes: Hazmat, Irene, Oddity, Mexai, Eleanor, Yellow Colony, **Poppet**, **Crash Test**, **Kiln** and **Sunday**. Fourteen items, including **Ambush Shield**, **Invisible Cloak** and three 1-point items (Lane Rations, Scout Pin, Tempered Sole). Six items **evolve** once into a stronger named version at a visible threshold. The Double Damage Idol is a jungle pickup, never a purchasable item.
+
+The diagonal mid lane is a shorter route between vaults, with its own tower for each team and regular creep waves. The outer lanes retain their longer routes; jungle camps flank mid and the Double Damage Idol sits at the central crossing. New teams start with all three lanes covered and a roamer; existing saved lane assignments are preserved.
 
 Heroes have a Stability stat: knockbacks scale with it, and heroes knocked into the lane edge take a wall slam. Full kits, numbers and evolution rules: [docs/CONTENT.md](docs/CONTENT.md). Design direction: [docs/DESIGN.md](docs/DESIGN.md).
 

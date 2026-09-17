@@ -14,6 +14,8 @@ func clean():
 		u.armor = 0
 		u.resolve = 0
 		u.pos = Vector2(500,80)
+		u.lane = 0
+		u.home_lane = 0
 	return b
 func _init() -> void:
 	check(Catalog.validate_definitions() == "", "Roster definitions validate")

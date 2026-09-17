@@ -3,17 +3,34 @@ extends RefCounted
 const BASES := [Vector2(745, 80), Vector2(255, 420)]
 const NORTH := [Vector2(745, 80), Vector2(255, 80), Vector2(255, 420)]
 const SOUTH := [Vector2(745, 80), Vector2(745, 420), Vector2(255, 420)]
+const MID := [Vector2(745, 80), Vector2(500, 250), Vector2(255, 420)]
+const LANE_COUNT := 3
+const LANE_NAMES := ["North", "South", "Mid"]
+# Assignment 2 remains roaming for compatibility with saved squads.
+const ROAM_ORDER := 2
+const MID_ORDER := 3
+const DEFAULT_ORDERS := [0, 1, 3, 1, 2]
 const JUNGLE := Rect2(388, 170, 224, 160)
-const ENTRANCES := [Vector2(444, 80), Vector2(556, 420)]
+const ENTRANCES := [Vector2(444, 80), Vector2(556, 420), Vector2(500, 250)]
 const JUNGLE_CENTER := Vector2(500, 250)
-const TOWERS := [[Vector2(535, 80), Vector2(745, 240)], [Vector2(255, 260), Vector2(465, 420)]]
-const CAMPS := [Vector2(444, 225), Vector2(556, 275)]
+const TOWERS := [[Vector2(535, 80), Vector2(745, 240), Vector2(615, 170)], [Vector2(255, 260), Vector2(465, 420), Vector2(385, 330)]]
+const CAMPS := [Vector2(444, 190), Vector2(556, 310)]
 const ROAD_HALF_WIDTH := 44.0
 const BOUNDS := Rect2(180, 20, 640, 460)
 const HERO_RADIUS := 17.0
 
 static func path(lane: int) -> Array:
-	return NORTH if lane == 0 else SOUTH
+	return [NORTH, SOUTH, MID][lane]
+
+static func order_lane(order: int) -> int:
+	return 2 if order == MID_ORDER else 0 if order == ROAM_ORDER else order
+
+static func nearest_lane(point: Vector2) -> int:
+	var best := 0
+	for lane in range(1, LANE_COUNT):
+		if project(point, lane).distance < project(point, best).distance:
+			best = lane
+	return best
 
 static func length(lane: int) -> float:
 	var points := path(lane)

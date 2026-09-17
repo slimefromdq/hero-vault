@@ -419,32 +419,34 @@ Never leave the next agent with “continue where I left off” and no coordinat
 ## 13. Session Handoff
 
 ### Current objective
-Rebuild Crash Test and Sunday from the user's design sheets (2026-09-16). This builds on the earlier session that added four heroes, five items and item evolution, and removed Atlas.
+Add a playable third lane as an experiment (2026-09-17). Implementation and headless validation are complete.
 
 ### What changed
-- **Crash Test:** Impact Test knockback punch; FULL SEND ballistic launch (`flight` state, lane change on landing, can miss); SAFETY RATING: ZERO; CRASH PROGRAM shockwaves on displacement. Stats and AI follow the sheet. Replaced the earlier charge/Write-Off kit.
-- **Sunday:** slow splash Sunbeam; Warmth aura with walk-to-ally AI (dash kind `walk`); Flare slow orb (`battle.launch_orb`, `explode`); BEAUTIFUL DAY `sun` field. Replaced Day of Rest/Sunday Best.
-- **New shared systems in `battle.gd`:** `knockback` scaled by the Stability stat, `wall_slam`, a second ability timer (`ability2`, `Kits.signature2`), `fighting_team`, `in_sunlight`. Heroes have `stability` and an optional `size`. Anchored fields (fire, sun) now outlive their owner. Eleanor's Intercede push uses `knockback`.
-- **Earlier session (same branch):** Poppet, Kiln, five items, burst item evolution, `hero_kits.gd` split, save migration, launcher/docs/asset cleanup.
+- Added diagonal mid between opposite-corner vaults, shorter than the equal-length outer routes. Each team has three towers; all three lanes receive creep waves.
+- Moved jungle camps off the mid road; the Idol remains at the central crossing. Roads render above jungle foliage, with a mid label.
+- Team Builder, Home and spectator hero labels support mid. Assignment IDs remain 0 north, 1 south, 2 roam; mid uses 3, mapping to simulation lane 2. Existing saves retain assignments. Shared new-squad/rival deployment is `[0, 1, 3, 1, 2]`.
+- Roamers evaluate both other lanes for pressure/wounded opponents, and can travel to/from mid. FULL SEND lands on the nearest of all three lanes.
+- Combat test fixtures explicitly assign their north-lane duels rather than relying on default deployment.
 
 ### Files changed
-- `scripts/catalog.gd`, `scripts/hero_kits.gd`, `scripts/battle.gd`, `scripts/battle_view.gd`
-- `tests/roster_items_test.gd`
-- `docs/CONTENT.md`, `README.md`, `heroes.md`, `systems.md`, `roadmap.md`, `AGENTS.md`
+- `scripts/map_layout.gd`, `scripts/battle.gd`, `scripts/hero_kits.gd`, `scripts/battle_view.gd`, `scripts/app_shell.gd`, `scripts/loadout_panel.gd`
+- `tests/map_test.gd`, `tests/navigation_test.gd`, `tests/rework_test.gd`, `tests/duel_test.gd`
+- `README.md`, `docs/DESIGN.md`, `systems.md`, `AGENTS.md`
 
 ### Validation run
-- Godot 4.7.2 headless: roster_items, rework, battle (nine full matches), navigation, map, duel, jungle, handoff, session, expression and expression_editor all pass.
-- Event probe over six matches: FULL SEND missed 20 of 111 landings; Flare missed 17 of 134 bursts. Wall slams and CRASH PROGRAM shockwaves occur.
-- Balance probe (45 squads): win rates 0.38–0.66; Crash Test 0.39, Sunday 0.38, Irene 0.66.
-- Screenshots under xvfb show the FULL SEND arc/landing marker, the Flare orb and the BEAUTIFUL DAY zone. display_test hangs under xvfb without a window manager, on the original code too.
+- Local Godot 4.7.2 headless: map, roster_items, rework, battle, navigation, duel, jungle, handoff, session, expression and expression_editor pass. Isolated APPDATA/LOCALAPPDATA directories under `.local-data/third-lane/` preserve player saves.
+- Battle check: nine full matches end with vault destruction in 162.1–511.2 simulated seconds; seeded reproducibility passes. Starter team wins 1/9 in that fixed-seed sample; this is an experimental map, not a balance sign-off.
+- Map regressions cover all three road traversals, six towers, waves per lane, rotations to each lane, automatic mid reinforcement, mid tower targeting and an actual FULL SEND mid landing. Navigation checks selectable/saved mid and queued deployment.
+- `git diff --check` passes.
 
 ### Known problems / warnings
-- Lanes are only 88 units wide, so wall slams are common; the fight story logs only strong slams and Crash Test's.
-- FULL SEND can fire in the first seconds of a match (cross-lane launch). This is intended but may be tuned.
-- All new numbers are prototype tuning.
+- Godot reports `Failed to read the root certificate store` at shutdown; checks still pass. Git reports LF-to-CRLF normalization notices.
+- Initial rework fixtures failed because they placed heroes on north while retaining new deployment lane IDs; corrected explicit fixture lanes and reran successfully. An added flight fixture initially omitted its target key; corrected and reran without script errors.
+- Real-display validation and visual screenshot inspection were not run. Three-lane balance remains prototype tuning.
+- Prior hero work remains: Crash Test/Sunday follow design sheets; Poppet/Kiln await final kits.
 
 ### Next recommended action
-Replace Poppet's and Kiln's first-pass kits with the user's designs when they arrive, then rerun `tools/balance_probe.gd` and `tests/roster_items_test.gd`.
+Play the third-lane experiment; use Team Builder to assign Mid or Restore starter squad when loading an existing save. Tune mid pressure and lane allocations based on viewing feedback, then run `tools/balance_probe.gd`.
 
 ---
 ## 14. Decision Log
@@ -462,6 +464,7 @@ Add entries only for decisions with future consequences.
 | 2026-09-15 | Items evolve once, at an announced threshold, and only for their owner. | Burst evolution creates spectator events; theft stays temporary. | Catalog `evolve`, battle item rules, UI |
 | 2026-09-15 | Hero-specific rules live in `hero_kits.gd` as static functions. | Keeps `battle.gd` generic without a battle↔kit reference cycle. | Simulation architecture |
 | 2026-09-16 | Stability (1–10) scales knockback; lane edges cause wall slams. | Crash Test's design ("worst Stability, built for crashes") and general physical comedy. | battle `knockback`/`wall_slam`, catalog |
+| 2026-09-17 | Add a shorter diagonal mid lane; preserve saved roaming assignment 2 and use 3 for mid. | User requested a third-lane experiment; preserve saves while testing earlier central pressure. | Map, simulation, Team Builder, spectator |
 | 2026-09-16 | Airborne heroes cannot be targeted or damaged. | FULL SEND must commit without mid-flight interaction. | battle, hero_kits flight |
 
 ---

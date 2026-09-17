@@ -38,3 +38,9 @@ Every hero has a Stability rating (1–10) that scales how far knockbacks push t
 ## Statistics and events
 
 Every match records structured events (damage, healing, kills, casts, projectile hits and misses, item activations, thefts, evolutions, cloak reveals and gank outcomes, Idol possession) and exports them as CSV for analysis in R.
+
+## Three-lane map
+
+North and south follow equal-length outer routes. Mid runs diagonally between the vaults and is shorter, bringing its waves into contact sooner. Each lane has one tower per team and receives three creeps per team each wave. A destroyed lane tower opens that approach to the opposing vault. Jungle camps flank the mid road, while the Double Damage Idol appears at the central crossing. Roamers choose among all three lanes based on enemy pressure and wounded opponents, collecting available camps during travel. FULL SEND lands on the nearest of the three roads.
+
+Team Builder offers North, South, Jungle / roam and Mid. Saved assignments retain their original meanings (0 north, 1 south, 2 roam); mid uses assignment 3. New squads cover every lane with one jungle roamer.

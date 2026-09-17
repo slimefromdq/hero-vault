@@ -37,8 +37,8 @@ var kills := [0, 0]
 var overtime := false
 var mirroring := false # Guards Poppet damage mirroring from recursing.
 
-func setup(seed_value: int, team_plan: int, hero_assignment: int, rival: int, team: Array = Catalog.DEFAULT_TEAM, equipment: Array = Catalog.DEFAULT_ITEMS, orders: Array = [0, 0, 1, 1, 2]) -> void:
-	if Catalog.validate(team, equipment) != "" or orders.size() != 5:
+func setup(seed_value: int, team_plan: int, hero_assignment: int, rival: int, team: Array = Catalog.DEFAULT_TEAM, equipment: Array = Catalog.DEFAULT_ITEMS, orders: Array = MapLayout.DEFAULT_ORDERS) -> void:
+	if Catalog.validate(team, equipment) != "" or orders.size() != 5 or orders.any(func(order): return int(order) < 0 or int(order) > MapLayout.MID_ORDER):
 		push_error("Invalid squad or item budget")
 		return
 	if Catalog.validate_definitions() != "":
@@ -54,8 +54,8 @@ func setup(seed_value: int, team_plan: int, hero_assignment: int, rival: int, te
 	var loadouts := [equipment, Catalog.enemy_items(rival)]
 	for side in range(2):
 		for slot in range(5):
-			var order: int = int(orders[slot]) if side == 0 else [0, 0, 1, 1, 2][slot]
-			var lane: int = order if order < 2 else 0
+			var order: int = int(orders[slot]) if side == 0 else MapLayout.DEFAULT_ORDERS[slot]
+			var lane: int = MapLayout.order_lane(order)
 			var id: String = lineups[side][slot]
 			var data: Dictionary = Catalog.HEROES[id]
 			var front: bool = data.reach < 130
@@ -67,12 +67,12 @@ func setup(seed_value: int, team_plan: int, hero_assignment: int, rival: int, te
 			var strength: float = 1.0 if side == 0 else [0.88, 0.96, 1.0][rival]
 			var u := make_unit(data.name, side, id, pos, data.hp * strength, data.damage * strength, data.reach, lane)
 			u.speed = float(data.speed)
-			u.roamer = order == 2
+			u.roamer = order == MapLayout.ROAM_ORDER
 			u.behavior = Catalog.behavior(id)
 			u.ultimate = Catalog.ULTIMATES.get(id, {}).get("cooldown", 0.0)
 			u.ultimate_cooldown = u.ultimate
 			u.items = loadouts[side][slot].duplicate()
-		for lane in range(2):
+		for lane in range(MapLayout.LANE_COUNT):
 			towers.append({"team": side, "lane": lane, "hp": 1100.0, "max_hp": 1100.0, "pos": MapLayout.TOWERS[side][lane], "cooldown": 0.0, "flash": 0.0})
 	for i in range(MapLayout.CAMPS.size()):
 		camps.append({"pos": MapLayout.CAMPS[i], "name": "Ember Beast" if i == 0 else "Grove Guardian", "kind": "power" if i == 0 else "regen", "hp": 260.0, "max_hp": 260.0, "respawn": 0.0, "cooldown": 0.0, "last_hit": -100.0})
@@ -116,7 +116,7 @@ func make_unit(hero_name: String, team: int, portrait: String, pos: Vector2, hp:
 
 func spawn_wave() -> void:
 	for team in range(2):
-		for lane in range(2):
+		for lane in range(MapLayout.LANE_COUNT):
 			for index in range(3):
 				var progress := 20.0 if team == 0 else MapLayout.length(lane)-20.0
 				var pos := MapLayout.point_at(lane, progress)
@@ -336,24 +336,32 @@ func consider_rotation(u: Dictionary) -> void:
 	if not u.roamer or u.rotate_cd > 0 or not u.rotation.is_empty() or u.hp/u.max_hp < 0.5:
 		return
 	u.rotate_cd = 30.0-u.behavior.roaming*4.0
-	var other_lane: int = 1 - u.lane
-	var allies := 0
-	var enemies := 0
-	var wounded := false
-	for hero in units:
-		if hero.creep or hero.hp <= 0 or hero.lane != other_lane:
+	var other_lane: int = (u.lane+1)%MapLayout.LANE_COUNT
+	var best_pressure := -INF
+	for lane in range(MapLayout.LANE_COUNT):
+		if lane == u.lane:
 			continue
-		if hero.team == u.team:
-			allies += 1
-		else:
-			enemies += 1
-			wounded = wounded or hero.hp / hero.max_hp < 0.65
-	# A roamer gives up local farm to reinforce an occupied, vulnerable lane.
-	if enemies > 0 and (wounded or enemies >= allies):
+		var allies := 0
+		var enemies := 0
+		var wounded := false
+		for hero in units:
+			if hero.creep or hero.hp <= 0 or hero.lane != lane or not hero.rotation.is_empty():
+				continue
+			if hero.team == u.team:
+				allies += 1
+			else:
+				enemies += 1
+				wounded = wounded or hero.hp / hero.max_hp < 0.65
+		if enemies > 0 and (wounded or enemies >= allies):
+			var pressure: float = enemies-allies+(2.0 if wounded else 0.0)
+			if pressure > best_pressure:
+				best_pressure = pressure
+				other_lane = lane
+	if best_pressure > -INF:
 		begin_rotation(u, other_lane)
 		u.rotate_cd = 34.0
 		try_cloak(u, "rotation")
-		log_event("Rotation  -  " + u.name, "Through the jungle toward " + ("north" if other_lane == 0 else "south") + " lane. Available camps provide farm during travel.", "rotate", u.id)
+		log_event("Rotation  -  " + u.name, "Through the jungle toward " + MapLayout.LANE_NAMES[other_lane].to_lower() + " lane. Available camps provide farm during travel.", "rotate", u.id)
 
 	elif camps.any(func(c): return c.hp > 0):
 		begin_rotation(u, other_lane)
@@ -385,7 +393,7 @@ func siege(u: Dictionary, dt: float) -> void:
 	u.facing = u.pos.angle_to_point(destination)
 	if u.pos.distance_to(target.pos) > u.reach + 30 or destination != target.pos:
 		u.pos = MapLayout.move_on_lane(u.pos, destination, u.lane, movement_speed(u, destination)*dt)
-		u.intent = "Push " + ("north" if u.lane == 0 else "south") + (" vault approach" if is_vault else " tower")
+		u.intent = "Push " + MapLayout.LANE_NAMES[u.lane].to_lower() + (" vault approach" if is_vault else " tower")
 		return
 	u.intent = "Siege vault" if is_vault else "Siege lane tower"
 	if u.cooldown > 0:

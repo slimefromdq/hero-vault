@@ -1,4 +1,5 @@
 extends Control
+const MapLayout = preload("res://scripts/map_layout.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 var host: Node2D
 var team: Array = []
@@ -69,9 +70,10 @@ func _ready() -> void:
 			update_view())
 		hero_choices.append(hero)
 		var order := choice(Vector2(409, y), 205)
-		for label in ["North lane", "South lane", "Jungle / roam"]:
+		for label in ["North lane", "South lane", "Jungle / roam", "Mid lane"]:
 			order.add_item(label)
 		order.get_popup().set_item_tooltip(2, "Clear neutral camps for XP and temporary boosts while rotating between lanes. Wounded heroes abandon camps.")
+		order.get_popup().set_item_tooltip(3, "The shorter diagonal route between vaults. Earlier wave contact, with a tower guarding each end.")
 		order.item_selected.connect(func(index): orders[slot] = index; update_view())
 		order_choices.append(order)
 		var row_items := []
@@ -97,7 +99,7 @@ func _ready() -> void:
 	make_button("Restore starter squad", Vector2(942, 656), Vector2(210, 42), func():
 		team = Catalog.DEFAULT_TEAM.duplicate()
 		gear = Catalog.DEFAULT_ITEMS.duplicate(true)
-		orders = [0, 0, 1, 1, 2]
+		orders = MapLayout.DEFAULT_ORDERS.duplicate()
 		update_view())
 	hide()
 
