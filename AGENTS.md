@@ -106,17 +106,22 @@ Fill these in only after inspecting the actual repository.
 
 ### Build / run / test commands
 
-Replace placeholders after repo inspection.
+Verified locally on 2026-09-17:
 
 ```powershell
 # Launch (uses -GodotPath, $env:GODOT, or godot on PATH):
 ./play.ps1
 # Run each test with an isolated user-data directory (APPDATA/LOCALAPPDATA on Windows, HOME on Linux):
-godot --headless --path . --script res://tests/roster_items_test.gd
-# Other headless checks: rework, battle, navigation, map, duel, jungle, handoff, session, expression, expression_editor.
+$godotExe = Join-Path $env:USERPROFILE 'Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$env:APPDATA = Join-Path $PWD '.local-data\checks\appdata'
+$env:LOCALAPPDATA = Join-Path $PWD '.local-data\checks\cache'
+New-Item -ItemType Directory -Force $env:APPDATA,$env:LOCALAPPDATA | Out-Null
+& $godotExe --headless --path . --script res://tests/roster_items_test.gd
+# Other headless checks: rework, battle, navigation, map, duel, jungle, handoff, session, expression, expression_editor, pacing.
 # display_test.gd needs a real display (xvfb-run works on Linux). No formatter/linter is configured.
 # Balance snapshot over random squads:
-N=45 godot --headless --path . --script res://tools/balance_probe.gd
+$env:N=45
+& $godotExe --headless --path . --script res://tools/balance_probe.gd
 ```
 
 An agent must not claim validation succeeded if these commands have not actually been run.
@@ -263,7 +268,7 @@ Current design target: **13 levels**.
 
 In the code (`battle.grant_xp`, `Catalog.GROWTH`):
 - XP needed for the next level = `level × 6`; creep 1, hero takedown 3, jungle camp 6.
-- Each level adds that hero's flat HP and basic damage.
+- Each level adds that hero's flat HP × 1.4 and basic damage. Starting HP also uses the 1.4 match pacing multiplier.
 - Ability numbers scale with level inside `hero_kits.gd`; there are no unlock points. Yellow Colony grows every two levels.
 - Level 13 is a hard cap (`Catalog.MAX_LEVEL`). Items do not change progression; Lucky Coin and Lane Rations evolve at levels 13 and 9.
 
@@ -419,34 +424,38 @@ Never leave the next agent with “continue where I left off” and no coordinat
 ## 13. Session Handoff
 
 ### Current objective
-Add a playable third lane as an experiment (2026-09-17). Implementation and headless validation are complete.
+Development Cycle 001: Make Matches Breathe (2026-09-17), implemented and validated. Kept **three lanes**, as explicitly requested after the attached proposal suggested two.
 
 ### What changed
-- Added diagonal mid between opposite-corner vaults, shorter than the equal-length outer routes. Each team has three towers; all three lanes receive creep waves.
-- Moved jungle camps off the mid road; the Idol remains at the central crossing. Roads render above jungle foliage, with a mid label.
-- Team Builder, Home and spectator hero labels support mid. Assignment IDs remain 0 north, 1 south, 2 roam; mid uses 3, mapping to simulation lane 2. Existing saves retain assignments. Shared new-squad/rival deployment is `[0, 1, 3, 1, 2]`.
-- Roamers evaluate both other lanes for pressure/wounded opponents, and can travel to/from mid. FULL SEND lands on the nearest of all three lanes.
-- Combat test fixtures explicitly assign their north-lane duels rather than relying on default deployment.
+- Expanded all travel coordinates by 2.5×; outer lanes are 2,075 units, mid approximately 1,491. Lane IDs, deployment and saved assignments remain unchanged.
+- Waves every 30s: two durable melee and two ranged creeps per lane/team, plus siege every third wave. Creeps scale gradually with match time; siege creeps do 3.5× structure damage.
+- Towers have 4,200 HP / 300 range, always target supported waves first, and punish exposed heroes. Vaults have 14,000 HP. Pre-overtime structure damage is 0.20×; unsupported heroes do a further 0.15×. Existing overtime still starts at 12 minutes; victory requires vault destruction.
+- Match HP and HP growth are 1.4× catalog values. Respawns take 16–45s. Heroes reassess danger every 0.3s, retreat to recover to 80% HP, follow waves and wait outside unsupported tower range. Pursuit, dueling, waveclear, protection and roaming ratings affect choices. Decision transitions are exported.
+- Added one off-lane Central Power Node, using existing camp infrastructure: activates around 4 minutes, 2,400 HP, 45 retaliation damage, teamwide 12 XP and 90s of empowered wave spawns (+40% HP, +60% structure damage). Returns 180s after capture. Up to three eligible heroes per team can contest; enemies near the node fight. Existing small camps, Idol, items, kits and art assets remain.
+- Spectator camera fits the enlarged map, with consistent field radii and click selection, creep-role/empowerment markings, objective countdowns and phase/buff labels. Replay snapshots include empowerment deadlines.
+- Added pacing regression tests, retained all three-lane routing/save checks, and made the balance probe report seeds, objective captures and unfinished matches using current default deployment.
 
 ### Files changed
-- `scripts/map_layout.gd`, `scripts/battle.gd`, `scripts/hero_kits.gd`, `scripts/battle_view.gd`, `scripts/app_shell.gd`, `scripts/loadout_panel.gd`
-- `tests/map_test.gd`, `tests/navigation_test.gd`, `tests/rework_test.gd`, `tests/duel_test.gd`
-- `README.md`, `docs/DESIGN.md`, `systems.md`, `AGENTS.md`
+- `scripts/map_layout.gd`, `scripts/battle.gd`, `scripts/battle_view.gd`, `scripts/app_shell.gd`
+- `tests/pacing_test.gd`, `tests/pacing_test.gd.uid`, `tests/map_test.gd`, `tests/duel_test.gd`, `tests/battle_test.gd`, `tools/balance_probe.gd`
+- `README.md`, `docs/DESIGN.md`, `docs/CONTENT.md`, `systems.md`, `AGENTS.md`
 
 ### Validation run
-- Local Godot 4.7.2 headless: map, roster_items, rework, battle, navigation, duel, jungle, handoff, session, expression and expression_editor pass. Isolated APPDATA/LOCALAPPDATA directories under `.local-data/third-lane/` preserve player saves.
-- Battle check: nine full matches end with vault destruction in 162.1–511.2 simulated seconds; seeded reproducibility passes. Starter team wins 1/9 in that fixed-seed sample; this is an experimental map, not a balance sign-off.
-- Map regressions cover all three road traversals, six towers, waves per lane, rotations to each lane, automatic mid reinforcement, mid tower targeting and an actual FULL SEND mid landing. Navigation checks selectable/saved mid and queued deployment.
-- `git diff --check` passes.
+- Headless focused checks: pacing, map, roster_items, rework, duel, jungle, handoff, navigation, expression and expression_editor pass. Player saves isolated under `.local-data/breathe/`.
+- Real-display test passes fullscreen/F11/follow/overview behavior. Rendered overview inspected; phase-label and camp-marker overlaps corrected. Final early/midgame captures are under `.local-data/breathe/`.
+- During tuning, six randomized squads (seeds 1000–1005, 0.28 pre-overtime structure damage) all finished in 727.3–1119.1s with 2–3 node captures per match. This is a small pacing sample, not balance approval.
+- Final queued-session check passes: all three games finish by vault destruction in 741.65, 922.45 and 742.00s; replay buffers remain bounded and completion stops the session.
+- Final standard nine-match duration sweep passes: 696.6–1150.2 simulated seconds (11:37–19:10), all ending in vault destruction, all with 1–3 node captures. Starter lineup wins 2/9; no roster balance claim. Fixed-seed state/event reproducibility and bounded replay checks pass.
+- All 12 headless checks plus the real-display check pass. `git diff --check` passes. Final duration logs: `.local-data/breathe/battle-verified.log` and `.local-data/breathe/session-verified.log`.
 
 ### Known problems / warnings
-- Godot reports `Failed to read the root certificate store` at shutdown; checks still pass. Git reports LF-to-CRLF normalization notices.
-- Initial rework fixtures failed because they placed heroes on north while retaining new deployment lane IDs; corrected explicit fixture lanes and reran successfully. An added flight fixture initially omitted its target key; corrected and reran without script errors.
-- Real-display validation and visual screenshot inspection were not run. Three-lane balance remains prototype tuning.
-- Prior hero work remains: Crash Test/Sunday follow design sheets; Poppet/Kiln await final kits.
+- Godot reports `Failed to read the root certificate store` at shutdown; passing checks still exit successfully. Git reports LF-to-CRLF normalization notices.
+- Early tuning exposed 564.1s and 575.5s endings in one standard matchup; final pre-overtime structure damage was reduced from 0.28 to 0.20. These failed intermediate runs are not counted as final validation.
+- Map route fixtures now isolate the traveler so combat retreat/death cannot invalidate a geometry test. Camp and objective combat are covered separately.
+- Crash Test/Sunday follow design sheets; Poppet/Kiln still await final kits. Drone buying and placeholder equipment/art were outside this change.
 
 ### Next recommended action
-Play the third-lane experiment; use Team Builder to assign Mid or Restore starter squad when loading an existing save. Tune mid pressure and lane allocations based on viewing feedback, then run `tools/balance_probe.gd`.
+Watch a full match at normal speed and a focused hero view; assess retreat frequency and objective contests before further roster balance changes. Current values and their purposes are documented in `docs/DESIGN.md`.
 
 ---
 ## 14. Decision Log
@@ -464,6 +473,7 @@ Add entries only for decisions with future consequences.
 | 2026-09-15 | Items evolve once, at an announced threshold, and only for their owner. | Burst evolution creates spectator events; theft stays temporary. | Catalog `evolve`, battle item rules, UI |
 | 2026-09-15 | Hero-specific rules live in `hero_kits.gd` as static functions. | Keeps `battle.gd` generic without a battle↔kit reference cycle. | Simulation architecture |
 | 2026-09-16 | Stability (1–10) scales knockback; lane edges cause wall slams. | Crash Test's design ("worst Stability, built for crashes") and general physical comedy. | battle `knockback`/`wall_slam`, catalog |
+| 2026-09-17 | Retain three lanes, expand travel by 2.5×, strengthen creep waves/towers, add retreat recovery and a four-minute power node. | Development Cycle 001; user explicitly said to keep three lanes. | Map, battle AI, objective, spectator, pacing tests |
 | 2026-09-17 | Add a shorter diagonal mid lane; preserve saved roaming assignment 2 and use 3 for mid. | User requested a third-lane experiment; preserve saves while testing earlier central pressure. | Map, simulation, Team Builder, spectator |
 | 2026-09-16 | Airborne heroes cannot be targeted or damaged. | FULL SEND must commit without mid-flight interaction. | battle, hero_kits flight |
 

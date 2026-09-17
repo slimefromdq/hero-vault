@@ -6,7 +6,16 @@ const Catalog = preload("res://scripts/catalog.gd")
 const MapLayout = preload("res://scripts/map_layout.gd")
 const Expressions = preload("res://scripts/expressions.gd")
 const Kits = preload("res://scripts/hero_kits.gd")
-const VAULT_HP := 3000.0
+const VAULT_HP := 14000.0
+const TOWER_HP := 4200.0
+const TOWER_RANGE := 300.0
+const HERO_HEALTH_SCALE := 1.4
+const WAVE_INTERVAL := 30.0
+const NODE_SPAWN := 240.0
+const NODE_RESPAWN := 180.0
+const NODE_BUFF := 90.0
+var wave_number := 0
+var empowered_until := [0.0, 0.0]
 var match_id := ""
 var records: Array = []
 var crown := {"spawned": false, "holder": -1, "pos": MapLayout.JUNGLE_CENTER, "since": 0.0, "kills": 0}
@@ -65,7 +74,7 @@ func setup(seed_value: int, team_plan: int, hero_assignment: int, rival: int, te
 			var pos := MapLayout.point_at(lane, progress)
 			pos += MapLayout.forward(pos, lane, side).orthogonal()*[-20, 20, -20, 20, 0][slot]
 			var strength: float = 1.0 if side == 0 else [0.88, 0.96, 1.0][rival]
-			var u := make_unit(data.name, side, id, pos, data.hp * strength, data.damage * strength, data.reach, lane)
+			var u := make_unit(data.name, side, id, pos, data.hp * strength * HERO_HEALTH_SCALE, data.damage * strength, data.reach, lane)
 			u.speed = float(data.speed)
 			u.roamer = order == MapLayout.ROAM_ORDER
 			u.behavior = Catalog.behavior(id)
@@ -73,9 +82,10 @@ func setup(seed_value: int, team_plan: int, hero_assignment: int, rival: int, te
 			u.ultimate_cooldown = u.ultimate
 			u.items = loadouts[side][slot].duplicate()
 		for lane in range(MapLayout.LANE_COUNT):
-			towers.append({"team": side, "lane": lane, "hp": 1100.0, "max_hp": 1100.0, "pos": MapLayout.TOWERS[side][lane], "cooldown": 0.0, "flash": 0.0})
+			towers.append({"team": side, "lane": lane, "hp": TOWER_HP, "max_hp": TOWER_HP, "pos": MapLayout.TOWERS[side][lane], "cooldown": 0.0, "flash": 0.0})
 	for i in range(MapLayout.CAMPS.size()):
 		camps.append({"pos": MapLayout.CAMPS[i], "name": "Ember Beast" if i == 0 else "Grove Guardian", "kind": "power" if i == 0 else "regen", "hp": 260.0, "max_hp": 260.0, "respawn": 0.0, "cooldown": 0.0, "last_hit": -100.0})
+	camps.append({"pos": MapLayout.POWER_NODE, "name": "Central Power Node", "kind": "node", "hp": 0.0, "max_hp": 2400.0, "respawn": NODE_SPAWN, "cooldown": 0.0, "last_hit": -100.0})
 	valid = true
 	log_event("Deployment", "Five heroes per side. Break a lane tower to reach the vault.", "deploy")
 	snapshot()
@@ -100,7 +110,7 @@ func make_unit(hero_name: String, team: int, portrait: String, pos: Vector2, hp:
 		"copy_until": 0.0, "cast_scale": 1.0, "swing": 0.0,
 		"larceny": [], "larceny_time": 0.0, "dash": {}, "damage_done": 0.0,
 		"healing_done": 0.0, "item_procs": 0, "last_attacker": -1,
-		"retreating": false, "ability2": 6.0, "stability": 5, "flight": {}, "safety": 0.0, "program": 0.0, "program_scale": 1.0, "program_cd": 0.0,
+		"retreating": false, "decision_cd": 0.0, "decision": "farm", "creep_kind": "", "empowered": false, "ability2": 6.0, "stability": 5, "flight": {}, "safety": 0.0, "program": 0.0, "program_scale": 1.0, "program_cd": 0.0,
 		"warmth": 0.0, "warmth_tick": 0.0, "sun_center": Vector2.ZERO,
 		"last_hero_hit": -100.0, "item_progress": {}, "cloak_story": -100.0}
 	if Catalog.HEROES.has(portrait):
@@ -115,14 +125,21 @@ func make_unit(hero_name: String, team: int, portrait: String, pos: Vector2, hp:
 	return u
 
 func spawn_wave() -> void:
+	wave_number += 1
 	for team in range(2):
 		for lane in range(MapLayout.LANE_COUNT):
-			for index in range(3):
+			for index in range(5 if wave_number % 3 == 0 else 4):
 				var progress := 20.0 if team == 0 else MapLayout.length(lane)-20.0
 				var pos := MapLayout.point_at(lane, progress)
-				pos += MapLayout.forward(pos, lane, team).orthogonal()*(index-1)*19
-				var u := make_unit("Creep", team, "", pos, 75, 8, 48, lane)
+				pos += MapLayout.forward(pos, lane, team).orthogonal()*((index % 3)-1)*19
+				var kind: String = "melee" if index < 2 else "ranged" if index < 4 else "siege"
+				var stats: Array = {"melee": [240.0, 12.0, 48.0], "ranged": [130.0, 19.0, 160.0], "siege": [380.0, 16.0, 220.0]}[kind]
+				var growth := 1.0 + clock/900.0
+				var empowered: bool = empowered_until[team] > clock
+				var u := make_unit(kind.capitalize()+" creep", team, "", pos, stats[0]*growth*(1.4 if empowered else 1.0), stats[1]*growth, stats[2], lane)
 				u.creep = true
+				u.creep_kind = kind
+				u.empowered = empowered
 				u.radius = 12.0
 				u.speed = 50.0
 
@@ -154,7 +171,7 @@ func step(dt: float = STEP) -> void:
 	wave_clock -= dt
 	if wave_clock <= 0:
 		spawn_wave()
-		wave_clock = 32.0
+		wave_clock = WAVE_INTERVAL
 	for u in units:
 		update_ultimate(u, dt)
 		if u.hp <= 0:
@@ -210,9 +227,33 @@ func step(dt: float = STEP) -> void:
 		if not u.larceny.is_empty():
 			update_larceny(u, dt)
 			continue
+		if u.charge > 0:
+			u.charge -= dt
+			u.intent = "Ultimate windup"
+			if u.charge <= 0:
+				resolve_ultimate(u, get_unit(u.charge_target))
+				if intermission.time > 0:
+					break
+			continue
 		if not u.creep:
+			update_decision(u, dt)
+			if u.decision == "retreat":
+				begin_retreat(u)
+				u.retreating = true
+				u.intent = "Retreat / recover at the vault"
+				if not u.rotation.is_empty():
+					u.lane = MapLayout.nearest_lane(u.pos)
+					u.pos = u.pos.move_toward(MapLayout.project(u.pos, u.lane).point, movement_speed(u, u.spawn)*dt)
+					if MapLayout.on_lane(u.pos, u.lane):
+						u.rotation.clear()
+				else:
+					u.pos = MapLayout.move_on_lane(u.pos, MapLayout.BASES[u.team], u.lane, movement_speed(u, u.spawn)*1.15*dt)
+				if u.pos.distance_to(MapLayout.BASES[u.team]) < 140:
+					heal(u, u, u.max_hp*0.08*dt)
+				continue
+			u.retreating = false
 			consider_rotation(u)
-		if not u.rotation.is_empty():
+		if not u.rotation.is_empty() and u.charge <= 0:
 			if u.rotation.size() == 2 and farm_camp(u, dt):
 				continue
 			u.intent = "Rotate through the jungle"
@@ -223,15 +264,9 @@ func step(dt: float = STEP) -> void:
 			if u.pos.distance_to(u.rotation[0]) < 2:
 				u.rotation.pop_front()
 			continue
-		if u.charge > 0:
-			u.charge -= dt
-			u.intent = "Ultimate windup"
-			if u.charge <= 0:
-				resolve_ultimate(u, get_unit(u.charge_target))
-				if intermission.time > 0:
-					break
-			continue
 		var enemy := select_enemy(u)
+		if not u.creep and avoid_tower(u, dt):
+			continue
 		if not u.creep:
 			use_abilities(u, enemy)
 			if u.charge > 0 or not u.dash.is_empty() or not u.flight.is_empty():
@@ -239,18 +274,7 @@ func step(dt: float = STEP) -> void:
 		if not enemy.is_empty():
 			var distance: float = u.pos.distance_to(enemy.pos)
 			u.facing = u.pos.angle_to_point(enemy.pos)
-			var retreat_threshold: float = 0.07 + u.behavior.retreat*0.045
-			if u.team == 0:
-				retreat_threshold *= [1.0, 0.65, 1.35][plan]
-			if not u.creep and u.hp / u.max_hp < retreat_threshold and u.shield <= 0 and u.pos.distance_to(u.spawn) > 80:
-				u.intent = "Retreat  -  wounded"
-				begin_retreat(u)
-				if u.lane != u.home_lane:
-					begin_rotation(u, u.home_lane)
-					u.rotate_cd = 34.0
-				else:
-					u.pos = MapLayout.move_on_lane(u.pos, u.spawn, u.lane, movement_speed(u, u.spawn)*1.15*dt)
-			elif distance > u.reach:
+			if distance > u.reach:
 				u.intent = "Approach " + enemy.name
 				var destination: Vector2 = enemy.pos
 				u.pos = MapLayout.move_on_lane(u.pos, destination, u.lane, movement_speed(u, destination)*dt)
@@ -332,8 +356,75 @@ func update_effects(u: Dictionary, dt: float) -> void:
 		u.copied_ultimate = ""
 	check_last_stand(u)
 
+func leading_creep(u: Dictionary) -> Dictionary:
+	var front: Dictionary = {}
+	var best := -INF
+	for ally in units:
+		if ally.team != u.team or not ally.creep or ally.hp <= 0 or ally.lane != u.lane:
+			continue
+		var progress: float = MapLayout.project(ally.pos, u.lane).progress * (1.0 if u.team == 0 else -1.0)
+		if progress > best:
+			best = progress
+			front = ally
+	return front
+
+func wave_support(u: Dictionary, position: Vector2) -> bool:
+	return units.any(func(a): return a.creep and a.team == u.team and a.lane == u.lane and a.hp > 0 and a.pos.distance_to(position) <= TOWER_RANGE)
+
+func avoid_tower(u: Dictionary, dt: float) -> bool:
+	var target := objective(u)
+	if target.get("vault", false) or wave_support(u, target.pos):
+		return false
+	if u.pos.distance_to(target.pos) > TOWER_RANGE + 60:
+		return false
+	var progress: float = MapLayout.project(target.pos, u.lane).progress
+	var safe := MapLayout.point_at(u.lane, progress + (-TOWER_RANGE-85 if u.team == 0 else TOWER_RANGE+85))
+	u.intent = "Wait for wave / tower danger"
+	u.pos = MapLayout.move_on_lane(u.pos, safe, u.lane, movement_speed(u, safe)*dt)
+	return true
+
+func update_decision(u: Dictionary, dt: float) -> void:
+	u.decision_cd -= dt
+	if u.decision_cd > 0:
+		return
+	u.decision_cd = 0.3
+	var friends := 1
+	var threats := 0
+	for other in units:
+		if other.id == u.id or other.hp <= 0 or other.creep or not other.flight.is_empty() or other.pos.distance_to(u.pos) > 260:
+			continue
+		if other.team == u.team:
+			friends += 1
+		else:
+			threats += 1
+	var threshold: float = 0.20 + u.behavior.retreat*0.07 + maxf(0, threats-friends)*0.08
+	if u.team == 0:
+		threshold *= [1.0, 0.8, 1.15][plan]
+	var previous: String = u.decision
+	if u.hp/u.max_hp < threshold or (previous == "retreat" and u.hp/u.max_hp < 0.8):
+		u.decision = "retreat"
+		u.camp_target = -1
+	elif not u.rotation.is_empty():
+		u.decision = "rotate"
+	else:
+		var enemy := select_enemy(u)
+		u.decision = "fight" if not enemy.is_empty() and not enemy.creep else "push" if not leading_creep(u).is_empty() else "farm"
+	if u.decision != previous:
+		record_event("decision", u.id, -1, 0, {"from": previous, "to": u.decision, "nearby_enemies": threats, "nearby_allies": friends})
+
 func consider_rotation(u: Dictionary) -> void:
-	if not u.roamer or u.rotate_cd > 0 or not u.rotation.is_empty() or u.hp/u.max_hp < 0.5:
+	if u.rotate_cd > 0 or not u.rotation.is_empty() or u.hp/u.max_hp < 0.5:
+		return
+	# Commit only part of a squad, leaving the other heroes to protect their waves.
+	var node: Dictionary = camps[-1]
+	var committed := units.filter(func(a): return a.team == u.team and not a.creep and a.hp > 0 and a.camp_target == camps.size()-1).size()
+	if node.hp > 0 and committed < 3 and (u.roamer or u.behavior.roaming >= 3) and select_enemy(u).is_empty():
+		begin_rotation(u, u.lane)
+		u.camp_target = camps.size()-1
+		u.rotate_cd = 35.0
+		log_event("CONTEST POWER NODE", u.name + " leaves lane for the empowered-wave objective.", "node_rotate", u.id)
+		return
+	if not u.roamer:
 		return
 	u.rotate_cd = 30.0-u.behavior.roaming*4.0
 	var other_lane: int = (u.lane+1)%MapLayout.LANE_COUNT
@@ -373,7 +464,7 @@ func begin_rotation(u: Dictionary, destination_lane: int) -> void:
 		var best := INF
 		for i in range(camps.size()):
 			var distance: float = u.pos.distance_to(camps[i].pos)
-			if camps[i].hp > 0 and distance < best:
+			if camps[i].kind != "node" and camps[i].hp > 0 and distance < best:
 				best = distance
 				u.camp_target = i
 	u.rotation_from = u.lane
@@ -390,6 +481,15 @@ func siege(u: Dictionary, dt: float) -> void:
 	var target := objective(u)
 	var destination: Vector2 = target.pos
 	var is_vault: bool = target.get("vault", false)
+	if not u.creep:
+		var wave := leading_creep(u)
+		if not wave.is_empty() and u.pos.distance_to(target.pos) > TOWER_RANGE:
+			var wave_progress: float = MapLayout.project(wave.pos, u.lane).progress
+			var behind := MapLayout.point_at(u.lane, wave_progress + (-65.0 if u.team == 0 else 65.0))
+			if u.pos.distance_to(behind) > 90:
+				u.intent = "Follow allied wave"
+				u.pos = MapLayout.move_on_lane(u.pos, behind, u.lane, movement_speed(u, behind)*dt)
+				return
 	u.facing = u.pos.angle_to_point(destination)
 	if u.pos.distance_to(target.pos) > u.reach + 30 or destination != target.pos:
 		u.pos = MapLayout.move_on_lane(u.pos, destination, u.lane, movement_speed(u, destination)*dt)
@@ -398,7 +498,11 @@ func siege(u: Dictionary, dt: float) -> void:
 	u.intent = "Siege vault" if is_vault else "Siege lane tower"
 	if u.cooldown > 0:
 		return
-	var multiplier := 0.42 if not overtime else 1.0 + (clock - 720.0)/90.0
+	var multiplier := 0.20 if not overtime else 1.0 + (clock - 720.0)/90.0
+	if u.creep:
+		multiplier *= (3.5 if u.creep_kind == "siege" else 1.0) * (1.6 if u.empowered else 1.0)
+	elif not wave_support(u, target.pos):
+		multiplier *= 0.15
 	var amount: float = power(u) * crown_multiplier(u) * multiplier * Kits.siege_multiplier(self, u)
 	reveal(u, "attack")
 	u.cooldown = attack_interval(u)
@@ -425,21 +529,22 @@ func update_towers(dt: float) -> void:
 			if u.team == tower.team or u.hp <= 0 or u.lane != tower.lane or u.invisible > 0 or not u.flight.is_empty():
 				continue
 			var distance: float = tower.pos.distance_to(u.pos)
-			if distance > 180:
+			if distance > TOWER_RANGE:
 				continue
-			var priority: float = distance - (200 if u.creep else 0)
+			var priority: float = distance - (1000 if u.creep else 0)
 			if priority < best:
 				best = priority
 				target = u
 		if not target.is_empty():
-			apply_damage(target, 23, -1)
-			tower.cooldown = 1.4
+			apply_damage(target, 55 if target.creep else target.max_hp*0.22, -1, false, "tower")
+			tower.cooldown = 1.2
 			tower.flash = 0.2
 			tower["target_pos"] = target.pos
 
 func select_enemy(u: Dictionary) -> Dictionary:
 	var best: Dictionary = {}
 	var best_score := INF
+	var ally: Dictionary = weakest_ally(u, 250) if not u.creep else {}
 	var vault_pos: Vector2 = objective(u).pos
 	# Convert lane pressure: once in siege range, only a nearby hero forces
 	# a defender to abandon the vault attack. Creeps must not cause endless chasing.
@@ -461,7 +566,9 @@ func select_enemy(u: Dictionary) -> Dictionary:
 		if enemy.creep:
 			score -= u.behavior.waveclear*6
 		else:
-			score -= u.behavior.pursuit*8*(1.0-enemy.hp/enemy.max_hp)
+			score -= (u.behavior.pursuit*15 + u.behavior.dueling*8)*(1.0-enemy.hp/enemy.max_hp)
+			if not ally.is_empty() and enemy.pos.distance_to(ally.pos) < 160:
+				score -= u.behavior.protection*12
 		if u.team == 0 and plan == 1 and not enemy.creep:
 			score -= 65
 		if u.team == 0 and plan == 2 and enemy.creep:
@@ -832,7 +939,7 @@ func apply_damage(target: Dictionary, amount: float, source_id: int, ultimate: b
 	if not source.is_empty() and not target.creep:
 		source.kills += 1
 	if not target.creep:
-		target.respawn = minf(26, 10 + clock / 55)
+		target.respawn = minf(45, 16 + clock / 35)
 		if source_id != -2:
 			kills[1 - target.team] += 1
 		var killer: String = source.name if not source.is_empty() else ("A jungle guardian" if source_id == -2 else "An attack")
@@ -847,8 +954,8 @@ func grant_xp(ally: Dictionary, amount: int) -> void:
 	ally.xp += amount
 	while ally.xp >= ally.level*Catalog.XP_PER_LEVEL and ally.level < Catalog.MAX_LEVEL:
 		ally.level += 1
-		ally.max_hp += Catalog.GROWTH[ally.portrait][0]
-		ally.hp += Catalog.GROWTH[ally.portrait][0]
+		ally.max_hp += Catalog.GROWTH[ally.portrait][0]*HERO_HEALTH_SCALE
+		ally.hp += Catalog.GROWTH[ally.portrait][0]*HERO_HEALTH_SCALE
 		ally.damage += Catalog.GROWTH[ally.portrait][1]
 		for item in ally.items:
 			advance_item(ally, item, 0)
@@ -863,6 +970,8 @@ func update_camps(dt: float) -> void:
 			camp.respawn -= dt
 			if camp.respawn <= 0:
 				camp.hp = camp.max_hp
+				if camp.kind == "node":
+					log_event("POWER NODE ONLINE", "Midgame objective: clear it for 90s of empowered waves and team XP.", "node_spawn")
 		elif clock-camp.last_hit > 6:
 			camp.hp = minf(camp.max_hp, camp.hp+25*dt)
 
@@ -874,19 +983,48 @@ func farm_camp(u: Dictionary, dt: float) -> bool:
 		u.camp_target = -1
 		return false
 	u.intent = "Jungle  -  " + camp.name
+	if camp.kind == "node":
+		var opponent: Dictionary = {}
+		for enemy in units:
+			if enemy.team != u.team and not enemy.creep and enemy.hp > 0 and enemy.invisible <= 0 and enemy.flight.is_empty() and enemy.pos.distance_to(u.pos) < 240 and enemy.pos.distance_to(camp.pos) < 300:
+				opponent = enemy
+				break
+		if not opponent.is_empty():
+			u.intent = "Fight / contest the power node"
+			use_abilities(u, opponent)
+			if u.charge > 0 or not u.flight.is_empty() or not u.dash.is_empty():
+				return true
+			if u.pos.distance_to(opponent.pos) > u.reach:
+				u.pos = u.pos.move_toward(opponent.pos, movement_speed(u, opponent.pos)*dt)
+			elif u.cooldown <= 0:
+				fire(u, opponent, u.damage, false)
+				u.cooldown = attack_interval(u)
+			return true
 	u.facing = u.pos.angle_to_point(camp.pos)
 	if u.pos.distance_to(camp.pos) > 70:
 		u.pos = u.pos.move_toward(camp.pos, u.speed*dt)
 		return true
 	if u.cooldown <= 0:
 		var damage: float = power(u) * crown_multiplier(u) * (1.2 if u.jungle_buff > 0 and u.buff_kind == "power" else 1.0)
+		var dealt: float = minf(camp.hp, damage)
 		u.attacks += 1
 		camp.hp = maxf(0, camp.hp-damage)
+		if camp.kind == "node":
+			record_event("node_damage", u.id, -1, dealt, {"remaining_hp": camp.hp})
 		camp.last_hit = clock
 		u.cooldown = attack_interval(u)
 		u.flash = 0.2
 		reveal(u, "attack")
 		if camp.hp <= 0:
+			if camp.kind == "node":
+				camp.respawn = NODE_RESPAWN
+				empowered_until[u.team] = clock + NODE_BUFF
+				for ally in units:
+					if ally.team == u.team and not ally.creep:
+						grant_xp(ally, 12)
+				log_event("POWER NODE CLAIMED", u.name + " earns team XP and 90s of empowered waves.", "node_capture", u.id)
+				u.camp_target = -1
+				return true
 			camp.respawn = 75.0
 			grant_xp(u, 6)
 			u.jungle_buff = 45.0
@@ -895,7 +1033,7 @@ func farm_camp(u: Dictionary, dt: float) -> bool:
 			log_event("CAMP CLEARED", u.name + " gains 6 XP and 45s of " + ("+20% attack damage." if camp.kind == "power" else "+3 health per second."), "jungle", u.id)
 			return true
 	if camp.cooldown <= 0:
-		apply_damage(u, 9.0, -2)
+		apply_damage(u, 45.0 if camp.kind == "node" else 9.0, -2)
 		camp.cooldown = 1.5
 	return true
 
@@ -904,13 +1042,13 @@ func log_event(title: String, detail: String, kind: String, actor: int = -1) -> 
 	events.append({"time": clock, "title": title, "detail": detail, "kind": kind, "actor": actor})
 
 func snapshot() -> void:
-	history.append({"time": clock, "units": units.duplicate(true), "shots": shots.duplicate(true), "vaults": vaults.duplicate(), "winner": winner, "kills": kills.duplicate(), "towers": towers.duplicate(true), "camps": camps.duplicate(true), "crown": crown.duplicate(true), "fields": fields.duplicate(true), "thefts":thefts.duplicate(true), "intermission":intermission.duplicate(true)})
+	history.append({"time": clock, "units": units.duplicate(true), "shots": shots.duplicate(true), "vaults": vaults.duplicate(), "winner": winner, "kills": kills.duplicate(), "towers": towers.duplicate(true), "camps": camps.duplicate(true), "crown": crown.duplicate(true), "fields": fields.duplicate(true), "thefts":thefts.duplicate(true), "intermission":intermission.duplicate(true), "empowered_until": empowered_until.duplicate()})
 	# About 30 seconds of replay, bounded even during long battles.
 	if history.size() > 210:
 		history.pop_front()
 
 func frame() -> Dictionary:
-	return {"time": clock, "units": units, "shots": shots, "vaults": vaults, "winner": winner, "kills": kills, "towers": towers, "camps": camps, "crown": crown, "fields": fields, "thefts":thefts, "intermission":intermission}
+	return {"time": clock, "units": units, "shots": shots, "vaults": vaults, "winner": winner, "kills": kills, "towers": towers, "camps": camps, "crown": crown, "fields": fields, "thefts":thefts, "intermission":intermission, "empowered_until": empowered_until}
 
 func duel_move(u: Dictionary, enemy: Dictionary, dt: float) -> void:
 	if Kits.holds_ground(self, u):
@@ -1021,7 +1159,7 @@ func export_csv(path: String) -> Error:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
-	var columns := PackedStringArray(["match_id", "time", "kind", "actor", "target", "value", "x", "y", "ability", "next_available", "held_seconds", "detail", "actor_hero", "actor_team", "actor_level", "target_hero", "reason", "item", "damage_type", "absorbed"])
+	var columns := PackedStringArray(["match_id", "time", "kind", "actor", "target", "value", "x", "y", "ability", "next_available", "held_seconds", "detail", "actor_hero", "actor_team", "actor_level", "target_hero", "reason", "item", "damage_type", "absorbed", "from", "to", "nearby_enemies", "nearby_allies", "remaining_hp"])
 	file.store_csv_line(columns)
 	for row in records:
 		var cells := PackedStringArray()

@@ -339,7 +339,7 @@ func focus_at(point: Vector2) -> void:
 		if u.hp <= 0:
 			continue
 		var gap := point.distance_to(arena_point(u.pos))
-		if gap <= (u.radius*0.82+5)*battle_view.camera_zoom and gap < distance:
+		if gap <= (maxf(8.0, u.radius*BattleView.WORLD_SCALE)+5)*battle_view.camera_zoom and gap < distance:
 			nearest = i
 			distance = gap
 	if nearest >= 0:

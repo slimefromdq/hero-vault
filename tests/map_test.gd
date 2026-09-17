@@ -31,9 +31,16 @@ func _init() -> void:
 	check(battle.units[4].roamer, "Saved assignment 2 remains jungle roaming")
 	battle.spawn_wave()
 	for lane in range(Map.LANE_COUNT):
-		check(battle.units.filter(func(u): return u.creep and u.lane == lane).size() == 6, "Each lane receives both creep waves")
+		check(battle.units.filter(func(u): return u.creep and u.lane == lane).size() == 8, "Each lane receives both creep waves")
+	# Route geometry is tested without combat interrupting the traveler.
+	battle.units = [battle.units[4]]
+	battle.towers.clear()
+	battle.wave_clock = 10000
+	for camp in battle.camps:
+		camp.hp = 0
+		camp.respawn = 10000
 	for destination in [1, 2, 0]:
-		var roamer: Dictionary = battle.units[4]
+		var roamer: Dictionary = battle.units[0]
 		battle.begin_rotation(roamer, destination)
 		var visited_jungle := false
 		for step in range(2000):
@@ -42,7 +49,7 @@ func _init() -> void:
 			if roamer.rotation.is_empty():
 				break
 		check(visited_jungle and roamer.rotation.is_empty() and Map.on_lane(roamer.pos, destination), "Roamer crosses jungle to each lane")
-	check(Map.nearest_lane(Vector2(500, 250)) == 2, "FULL SEND can select mid on landing")
+	check(Map.nearest_lane(Map.JUNGLE_CENTER) == 2, "FULL SEND can select mid on landing")
 	var pressure = Battle.new()
 	pressure.setup(48, 0, 0, 0)
 	var scout: Dictionary = pressure.units[4]

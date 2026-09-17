@@ -10,15 +10,18 @@ func _init() -> void:
 		stats[id] = {"games":0,"wins":0,"kills":0,"deaths":0,"dmg":0.0,"heal":0.0}
 	var n := int(OS.get_environment("N")) if OS.get_environment("N") != "" else 30
 	var times := []
+	var unfinished := 0
 	for g in range(n):
 		var pool: Array = Catalog.HERO_IDS.duplicate()
 		var team := []
 		for i in range(5):
 			team.append(pool.pop_at(rng.randi_range(0, pool.size()-1)))
 		var b = Battle.new()
-		b.setup(1000+g, g%3, 0, g%3, team, Catalog.DEFAULT_ITEMS, [0,0,1,1,2])
-		while b.winner == -1 and b.clock < 1100:
+		b.setup(1000+g, g%3, 0, g%3, team, Catalog.DEFAULT_ITEMS)
+		while b.winner == -1 and b.clock < 1200:
 			b.step()
+		unfinished += 1 if b.winner == -1 else 0
+		print("seed=%d seconds=%.1f winner=%d node_captures=%d" % [1000+g, b.clock, b.winner, b.events.filter(func(e): return e.kind == "node_capture").size()])
 		times.append(int(b.clock))
 		for u in b.units:
 			if u.creep: continue
@@ -31,4 +34,5 @@ func _init() -> void:
 		if s.games == 0: continue
 		print("%-11s g=%3d win=%.2f k=%.1f d=%.1f dmg=%5d heal=%4d" % [id, s.games, float(s.wins)/s.games, float(s.kills)/s.games, float(s.deaths)/s.games, s.dmg/s.games, s.heal/s.games])
 	print("times ", times)
-	quit()
+	print("unfinished ", unfinished)
+	quit(1 if unfinished else 0)

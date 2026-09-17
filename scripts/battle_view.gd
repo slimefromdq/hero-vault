@@ -1,6 +1,8 @@
 extends Node2D
 ## A clipped, presentation-only camera. Coordinates never feed back into combat.
 const MapLayout = preload("res://scripts/map_layout.gd")
+const WORLD_SCALE := 0.328
+const Battle = preload("res://scripts/battle.gd")
 const INK := Color("0a1220")
 const PANEL := Color("111e30")
 const BORDER := Color("28394e")
@@ -36,7 +38,7 @@ func project_point(world_position: Vector2) -> Vector2:
 	return VIEW_CENTER + (arena_point(world_position) - camera_center) * camera_zoom
 
 func arena_point(pos: Vector2) -> Vector2:
-	return Vector2(303.5, 214) + pos * Vector2.ONE * 0.82
+	return Vector2(713.5, 419) + (pos - MapLayout.JUNGLE_CENTER) * WORLD_SCALE
 
 func panel_style(color: Color, radius: int = 10) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -72,14 +74,14 @@ func _draw() -> void:
 		var kind: String = field.get("kind", "gas")
 		if kind == "sun":
 			var glow := arena_point(field.pos)
-			draw_circle(glow, field.radius*0.82, Color(SUN, 0.16))
-			draw_circle(glow, field.radius*0.55, Color(1, 1, 0.9, 0.08))
-			draw_arc(glow, field.radius*0.82, 0, TAU, 64, SUN, 3, true)
-			label_at("BEAUTIFUL DAY", glow+Vector2(-40, -field.radius*0.82-6), 10, SUN)
+			draw_circle(glow, field.radius*WORLD_SCALE, Color(SUN, 0.16))
+			draw_circle(glow, field.radius*WORLD_SCALE*0.67, Color(1, 1, 0.9, 0.08))
+			draw_arc(glow, field.radius*WORLD_SCALE, 0, TAU, 64, SUN, 3, true)
+			label_at("BEAUTIFUL DAY", glow+Vector2(-40, -field.radius*WORLD_SCALE-6), 10, SUN)
 			continue
 		var tint := Color("f08a3c") if kind == "fire" else Color("e15b62")
-		draw_circle(arena_point(field.pos), field.radius*0.82, Color(tint, 0.2))
-		draw_arc(arena_point(field.pos), field.radius*0.82, 0, TAU, 48, tint, 2, true)
+		draw_circle(arena_point(field.pos), field.radius*WORLD_SCALE, Color(tint, 0.2))
+		draw_arc(arena_point(field.pos), field.radius*WORLD_SCALE, 0, TAU, 48, tint, 2, true)
 	draw_camps(frame)
 	draw_crown(frame)
 	for tower in frame.towers:
@@ -112,7 +114,7 @@ func _draw() -> void:
 		core.append(core[0])
 		draw_polyline(core, color, 4, true)
 		label_at("BLUE VAULT" if team == 0 else "RED VAULT", center+Vector2(-34, -43), 10, color)
-		bar(Rect2(center+Vector2(-35, 44), Vector2(70, 6)), frame.vaults[team]/3000.0, color)
+		bar(Rect2(center+Vector2(-35, 44), Vector2(70, 6)), frame.vaults[team]/Battle.VAULT_HP, color)
 		label_at("%d" % frame.vaults[team], center+Vector2(-17, 62), 11, color)
 	for u in frame.units:
 		if u.hp > 0:
@@ -146,8 +148,16 @@ func _draw() -> void:
 	draw_set_transform(Vector2(-322, -214))
 	if frame.get("intermission",{}).get("time",0) > 0:
 		label_at("INTERMISSION / COMBAT FROZEN",Vector2(570,260),16,Color("dfbcff"))
+	if frame.time < Battle.NODE_SPAWN:
+		label_at("EARLY GAME / LANES", Vector2(338, 229), 11, MUTED)
+	elif frame.time < 720:
+		label_at("MIDGAME / CONTEST POWER NODE", Vector2(338, 229), 11, GOLD)
 	if frame.time >= 720:
-		label_at("OVERTIME / VAULT DEFENSES WEAKENING", Vector2(530, 242), 11, GOLD)
+		label_at("OVERTIME / VAULT DEFENSES WEAKENING", Vector2(338, 229), 11, GOLD)
+	for team in range(2):
+		var remaining: float = frame.get("empowered_until", [0.0, 0.0])[team]-frame.time
+		if remaining > 0:
+			label_at(("BLUE" if team == 0 else "RED")+" EMPOWERED WAVES / %ds" % int(ceil(remaining)), Vector2(338+team*375, 608), 11, BLUE if team == 0 else RED)
 	if frame.winner != -1:
 		box(Rect2(526, 356, 375, 105), Color("101b2b"))
 		label_at("VICTORY" if frame.winner == 0 else "DEFEAT", Vector2(624, 402), 29, GREEN if frame.winner == 0 else RED)
@@ -157,16 +167,16 @@ func draw_terrain() -> void:
 	var outer := panel_style(Color("16242b"), 35)
 	outer.border_color = Color("66716e")
 	outer.set_border_width_all(2)
-	draw_style_box(outer, Rect2(arena_point(MapLayout.BOUNDS.position), MapLayout.BOUNDS.size*0.82))
+	draw_style_box(outer, Rect2(arena_point(MapLayout.BOUNDS.position), MapLayout.BOUNDS.size*WORLD_SCALE))
 	# One contiguous jungle, with small trail entrances for autonomous rotations.
 	var jungle := panel_style(Color("153e2c"), 15)
 	jungle.border_color = Color("729b72")
 	jungle.set_border_width_all(3)
-	draw_style_box(jungle, Rect2(arena_point(MapLayout.JUNGLE.position), MapLayout.JUNGLE.size*0.82))
+	draw_style_box(jungle, Rect2(arena_point(MapLayout.JUNGLE.position), MapLayout.JUNGLE.size*WORLD_SCALE))
 	for side in range(2):
 		draw_dashed_line(arena_point(MapLayout.ENTRANCES[side]), arena_point(MapLayout.JUNGLE_CENTER), Color("456c43"), 9, 8)
 	for i in range(23):
-		var point := MapLayout.JUNGLE.position+Vector2(15+(i*53)%190, 20+(i*47)%116)
+		var point := MapLayout.JUNGLE.position+Vector2(35+(i*137)%490, 30+(i*119)%320)
 		if MapLayout.on_lane(point, 2):
 			continue
 		var center := arena_point(point)
@@ -177,19 +187,19 @@ func draw_terrain() -> void:
 		var road := PackedVector2Array()
 		for point in MapLayout.path(lane):
 			road.append(arena_point(point))
-		draw_polyline(road, Color("879085"), MapLayout.ROAD_HALF_WIDTH*1.64+4, true)
-		draw_polyline(road, Color("343e41"), MapLayout.ROAD_HALF_WIDTH*1.64, true)
+		draw_polyline(road, Color("879085"), MapLayout.ROAD_HALF_WIDTH*(WORLD_SCALE*2)+4, true)
+		draw_polyline(road, Color("343e41"), MapLayout.ROAD_HALF_WIDTH*(WORLD_SCALE*2), true)
 		# Rounded lane bends and subtle paving keep the broad routes clear.
 		for p in road:
-			draw_circle(p, MapLayout.ROAD_HALF_WIDTH*0.82, Color("343e41"))
+			draw_circle(p, MapLayout.ROAD_HALF_WIDTH*WORLD_SCALE, Color("343e41"))
 		for progress in range(100, int(MapLayout.length(lane))-70, 78):
 			var point := MapLayout.point_at(lane, progress)
 			var tangent := MapLayout.forward(point, lane, 0)
 			var center := arena_point(point)
-			draw_line(center-tangent.orthogonal()*27, center+tangent.orthogonal()*27, Color("475050"), 1)
-	label_at("MID LANE", arena_point(Vector2(535, 235)), 10, GOLD)
-	label_at("NORTH / WEST LANE", arena_point(Vector2(335, 35)), 10, MUTED)
-	label_at("SOUTH / EAST LANE", arena_point(Vector2(520, 474)), 10, MUTED)
+			draw_line(center-tangent.orthogonal()*MapLayout.ROAD_HALF_WIDTH*WORLD_SCALE*0.65, center+tangent.orthogonal()*MapLayout.ROAD_HALF_WIDTH*WORLD_SCALE*0.65, Color("475050"), 1)
+	label_at("MID LANE", arena_point(MapLayout.JUNGLE_CENTER+Vector2(45, -30)), 10, GOLD)
+	label_at("NORTH / WEST LANE", arena_point(Vector2(455, -32)), 10, MUTED)
+	label_at("SOUTH / EAST LANE", arena_point(Vector2(917.5, 1065)), 10, MUTED)
 	# Side landmarks echo the sketch without adding combat objects.
 	for offset in [Vector2(-46, -26), Vector2(37, 28), Vector2(-40, 27)]:
 		var blue: Vector2 = arena_point(MapLayout.BASES[0])+offset
@@ -199,7 +209,7 @@ func draw_terrain() -> void:
 
 func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 	var center := arena_point(u.pos)
-	var radius: float = u.radius*0.82
+	var radius: float = maxf(8.0, u.radius*WORLD_SCALE)
 	var flight: Dictionary = u.get("flight", {})
 	if not flight.is_empty():
 		# FULL SEND: shadow on the ground, token high in the arc, landing marker.
@@ -213,9 +223,16 @@ func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 		draw_arc(center, radius+7, 0, TAU, 32, GOLD if u.buff_kind == "power" else GREEN, 3, true)
 	var color := BLUE if u.team == 0 else RED
 	if u.creep:
+		if u.get("empowered", false):
+			draw_arc(center, 15, 0, TAU, 24, GOLD, 2, true)
 		draw_circle(center + Vector2(0, 4), 11, Color(0, 0, 0, 0.25))
 		draw_colored_polygon(PackedVector2Array([center + Vector2(-7, -7), center + Vector2(7, -7), center + Vector2(9, 7), center + Vector2(-9, 7)]), color.darkened(0.35))
-		draw_line(center + Vector2(-3, -2), center + Vector2(3, -2), TEXT, 2)
+		if u.get("creep_kind", "") == "siege":
+			draw_line(center, center+Vector2.from_angle(u.facing)*16, TEXT, 5, true)
+		elif u.get("creep_kind", "") == "ranged":
+			draw_circle(center, 3, TEXT)
+		else:
+			draw_line(center + Vector2(-3, -2), center + Vector2(3, -2), TEXT, 2)
 		bar(Rect2(center + Vector2(-10, 12), Vector2(20, 3)), u.hp / u.max_hp, color)
 		return
 	draw_circle(center + Vector2(0, 7), radius+4, Color(0, 0, 0, 0.3))
@@ -272,10 +289,10 @@ func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 	if u.get("safety",0) > 0:
 		draw_rect(Rect2(center-Vector2.ONE*(radius+6), Vector2.ONE*(radius+6)*2), Color("9aa5b1"), false, 3)
 	if u.get("warmth",0) > 0:
-		draw_circle(center,130*0.82,Color(SUN,0.07))
-		draw_arc(center,130*0.82,0,TAU,48,Color(SUN,0.5),2,true)
+		draw_circle(center,130*WORLD_SCALE,Color(SUN,0.07))
+		draw_arc(center,130*WORLD_SCALE,0,TAU,48,Color(SUN,0.5),2,true)
 	if u.get("hold_line",0) > 0:
-		draw_arc(center,140*0.82,0,TAU,48,Color(GREEN,0.4),2,true)
+		draw_arc(center,140*WORLD_SCALE,0,TAU,48,Color(GREEN,0.4),2,true)
 	if u.get("kill_streak",0) > 0:
 		label_at("+%d POWER" % (u.kill_streak*8),center+Vector2(-23,radius+24),8,GOLD)
 	bar(Rect2(center + Vector2(-22, radius+7), Vector2(44, 4)), u.hp / u.max_hp, color)
@@ -290,18 +307,18 @@ func draw_unit(u: Dictionary, time: float, winner: int = -1) -> void:
 func draw_camps(frame: Dictionary) -> void:
 	for camp in frame.get("camps", []):
 		var center := arena_point(camp.pos)
-		var color := GOLD if camp.kind == "power" else GREEN
-		draw_circle(center, 35, Color("172a24"))
-		draw_arc(center, 35, 0, TAU, 40, color.darkened(0.4), 3, true)
+		var color := GOLD if camp.kind in ["power", "node"] else GREEN
+		draw_circle(center, 22, Color("172a24"))
+		draw_arc(center, 22, 0, TAU, 40, color.darkened(0.4), 3, true)
 		if camp.hp > 0:
-			draw_circle(center, 20, color.darkened(0.5))
+			draw_circle(center, 13, color.darkened(0.5))
 			draw_line(center+Vector2(-15, -10), center+Vector2(-5, -3), color, 5)
 			draw_line(center+Vector2(15, -10), center+Vector2(5, -3), color, 5)
-			bar(Rect2(center+Vector2(-40, 34), Vector2(80, 6)), camp.hp/camp.max_hp, color)
+			bar(Rect2(center+Vector2(-24, 25), Vector2(48, 4)), camp.hp/camp.max_hp, color)
 		else:
-			label_at("%ds" % int(ceil(camp.respawn)), center+Vector2(-15, 5), 18, MUTED)
-		label_at(camp.name, center+Vector2(-43, -43), 11, color)
-		label_at("POWER + XP" if camp.kind == "power" else "REGEN + XP", center+Vector2(-43, 52), 10, color)
+			label_at("%ds" % int(ceil(camp.respawn)), center+Vector2(-13, 5), 12, MUTED)
+		label_at("POWER NODE" if camp.kind == "node" else camp.name, center+Vector2(-30, -29), 9, color)
+		label_at("TEAM WAVES + XP" if camp.kind == "node" else "POWER + XP" if camp.kind == "power" else "REGEN + XP", center+Vector2(-30, 39), 8, color)
 
 func draw_crown(frame: Dictionary) -> void:
 	var crown: Dictionary = frame.get("crown", {})

@@ -34,6 +34,6 @@ func _init() -> void:
 	b.shots[0].team = 0
 	b.duel_move(u, enemy, 0.05)
 	check(u.dodge_cd == 0, "Friendly shots do not trigger dodges")
-	check(b.MapLayout.BASES[0] == Vector2(745, 80) and b.camps.size() == 2, "Compact map retains both jungle camps")
+	check(b.MapLayout.BASES[0].distance_to(b.MapLayout.BASES[1]) > 1400 and b.camps.size() == 3, "Expanded map retains camps and adds one timed objective")
 	print("DUEL PASS" if failures == 0 else "DUEL FAIL: %d" % failures)
 	quit(1 if failures else 0)

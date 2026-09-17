@@ -73,13 +73,15 @@ func _init() -> void:
 				if battle.winner != -1:
 					break
 			check(battle.winner != -1, "Battle terminates by vault destruction within 20 simulated minutes")
+			check(battle.clock >= 600, "Match has at least ten minutes for lanes and objectives")
 			check(battle.vaults[0] == 0 or battle.vaults[1] == 0, "Victory requires destroyed vault")
 			var clutches := 0
 			for event in battle.events:
 				if event.kind == "clutch":
 					clutches += 1
 			clutch_count += clutches
-			print("MATCH plan=%d rival=%d winner=%d seconds=%.1f kills=%s clutch_events=%d" % [p, rival, battle.winner, battle.clock, str(battle.kills), clutches])
+			var captures: int = battle.events.filter(func(e): return e.kind == "node_capture").size()
+			print("MATCH plan=%d rival=%d winner=%d seconds=%.1f kills=%s clutch_events=%d node_captures=%d" % [p, rival, battle.winner, battle.clock, str(battle.kills), clutches, captures])
 	check(clutch_count > 0, "Standard combat produces a low-health recovery moment")
 	print("PASS" if failures == 0 else "%d FAILURES" % failures)
 	quit(0 if failures == 0 else 1)

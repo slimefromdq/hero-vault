@@ -67,3 +67,7 @@ Shared 18-point team budget; two distinct slots per hero.
 ## New CSV event kinds
 
 `stitch`, `stitch_mirror`, `full_send_launch`, `full_send_land` (`detail` = hit/miss, value = heroes hit), `crash_program_shockwave`, `knockback`, `wall_slam`, `flare_burst` (`detail` = hit/miss), `cloak_reveal`, `cloak_gank_success`, `item_evolved`. Answer "Where is Crash Test now?" with `full_send_*` positions, and "Do Sunday's slow attacks land?" with `projectile_hit`/`projectile_miss` plus `flare_burst`. Existing IDs, including `crown_*` for the Double Damage Idol, are unchanged.
+
+## Match pacing modifier (Development Cycle 001)
+
+The catalog's hero HP and flat HP growth are multiplied by **1.4** when deployed in a match; damage, equipment and authored abilities are unchanged. Expanded three-lane travel, creep roles, tower defenses, retreat decisions and the timed Central Power Node are specified in [DESIGN.md](DESIGN.md#development-cycle-001-make-matches-breathe).

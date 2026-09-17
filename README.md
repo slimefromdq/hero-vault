@@ -16,7 +16,7 @@ F11 toggles fullscreen. Click a hero or press 1–5 to follow; scroll to zoom; 0
 
 Ten heroes: Hazmat, Irene, Oddity, Mexai, Eleanor, Yellow Colony, **Poppet**, **Crash Test**, **Kiln** and **Sunday**. Fourteen items, including **Ambush Shield**, **Invisible Cloak** and three 1-point items (Lane Rations, Scout Pin, Tempered Sole). Six items **evolve** once into a stronger named version at a visible threshold. The Double Damage Idol is a jungle pickup, never a purchasable item.
 
-The diagonal mid lane is a shorter route between vaults, with its own tower for each team and regular creep waves. The outer lanes retain their longer routes; jungle camps flank mid and the Double Damage Idol sits at the central crossing. New teams start with all three lanes covered and a roamer; existing saved lane assignments are preserved.
+All three lanes remain, on a map with 2.5× longer travel distances. Durable melee and ranged waves arrive every 30 seconds, joined by siege creeps every third wave. Heroes follow waves, retreat to recover, and wait for creep support before pushing towers. The off-lane Central Power Node appears at four minutes and rewards its captors with team XP and empowered waves. Existing camps and the Double Damage Idol remain. Matches target roughly 12–20 minutes; overtime begins at 12 minutes. Saved lane assignments are preserved. See [match structure](docs/DESIGN.md#development-cycle-001-make-matches-breathe).
 
 Heroes have a Stability stat: knockbacks scale with it, and heroes knocked into the lane edge take a wall slam. Full kits, numbers and evolution rules: [docs/CONTENT.md](docs/CONTENT.md). Design direction: [docs/DESIGN.md](docs/DESIGN.md).
 
@@ -45,6 +45,6 @@ Run each test with a separate user-data directory so UI tests don't overwrite yo
 godot --headless --path . --script res://tests/NAME_test.gd
 ```
 
-Headless tests: `roster_items`, `rework`, `battle`, `navigation`, `map`, `duel`, `jungle`, `handoff`, `session`, `expression`, `expression_editor`. `display` needs a real window. Balance snapshot: `N=45 godot --headless --path . --script res://tools/balance_probe.gd`.
+Headless tests: `roster_items`, `rework`, `battle`, `navigation`, `map`, `duel`, `jungle`, `handoff`, `session`, `expression`, `expression_editor`, `pacing`. `display` needs a real window. Balance snapshot: `N=45 godot --headless --path . --script res://tools/balance_probe.gd`.
 
 Online matchmaking, authored animation, spectator world objects, advanced AI, generalized Stability and an R dashboard remain future work.

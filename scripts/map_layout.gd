@@ -1,22 +1,23 @@
 extends RefCounted
 ## Shared by simulation and drawing. Blue is northeast; red is southwest.
-const BASES := [Vector2(745, 80), Vector2(255, 420)]
-const NORTH := [Vector2(745, 80), Vector2(255, 80), Vector2(255, 420)]
-const SOUTH := [Vector2(745, 80), Vector2(745, 420), Vector2(255, 420)]
-const MID := [Vector2(745, 80), Vector2(500, 250), Vector2(255, 420)]
+const BASES := [Vector2(1480, 80), Vector2(255, 930)]
+const NORTH := [Vector2(1480, 80), Vector2(255, 80), Vector2(255, 930)]
+const SOUTH := [Vector2(1480, 80), Vector2(1480, 930), Vector2(255, 930)]
+const MID := [Vector2(1480, 80), Vector2(867.5, 505), Vector2(255, 930)]
 const LANE_COUNT := 3
 const LANE_NAMES := ["North", "South", "Mid"]
 # Assignment 2 remains roaming for compatibility with saved squads.
 const ROAM_ORDER := 2
 const MID_ORDER := 3
 const DEFAULT_ORDERS := [0, 1, 3, 1, 2]
-const JUNGLE := Rect2(388, 170, 224, 160)
-const ENTRANCES := [Vector2(444, 80), Vector2(556, 420), Vector2(500, 250)]
-const JUNGLE_CENTER := Vector2(500, 250)
-const TOWERS := [[Vector2(535, 80), Vector2(745, 240), Vector2(615, 170)], [Vector2(255, 260), Vector2(465, 420), Vector2(385, 330)]]
-const CAMPS := [Vector2(444, 190), Vector2(556, 310)]
+const JUNGLE := Rect2(587.5, 305, 560, 400)
+const ENTRANCES := [Vector2(727.5, 80), Vector2(1007.5, 930), Vector2(867.5, 505)]
+const JUNGLE_CENTER := Vector2(867.5, 505)
+const TOWERS := [[Vector2(955, 80), Vector2(1480, 480), Vector2(1155, 305)], [Vector2(255, 530), Vector2(780, 930), Vector2(580, 705)]]
+const CAMPS := [Vector2(727.5, 355), Vector2(1007.5, 655)]
+const POWER_NODE := Vector2(680, 505)
 const ROAD_HALF_WIDTH := 44.0
-const BOUNDS := Rect2(180, 20, 640, 460)
+const BOUNDS := Rect2(67.5, -70, 1600, 1150)
 const HERO_RADIUS := 17.0
 
 static func path(lane: int) -> Array:

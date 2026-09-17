@@ -41,6 +41,12 @@ Every match records structured events (damage, healing, kills, casts, projectile
 
 ## Three-lane map
 
-North and south follow equal-length outer routes. Mid runs diagonally between the vaults and is shorter, bringing its waves into contact sooner. Each lane has one tower per team and receives three creeps per team each wave. A destroyed lane tower opens that approach to the opposing vault. Jungle camps flank the mid road, while the Double Damage Idol appears at the central crossing. Roamers choose among all three lanes based on enemy pressure and wounded opponents, collecting available camps during travel. FULL SEND lands on the nearest of the three roads.
+North and south follow equal-length outer routes. Mid runs diagonally between the vaults and is shorter, bringing its waves into contact sooner. Each lane has one tower per team and receives two melee and two ranged creeps per team every 30 seconds, plus a siege creep every third wave. A destroyed lane tower opens that approach to the opposing vault. Jungle camps flank the mid road, while the Double Damage Idol appears at the central crossing. Roamers choose among all three lanes based on enemy pressure and wounded opponents, collecting available camps during travel. FULL SEND lands on the nearest of the three roads.
 
 Team Builder offers North, South, Jungle / roam and Mid. Saved assignments retain their original meanings (0 north, 1 south, 2 roam); mid uses assignment 3. New squads cover every lane with one jungle roamer.
+
+## Match phases and wave pressure
+
+The map has 2.5× its former travel distances. Heroes have 40% more starting HP and HP growth, with longer returns after death. Their regular danger checks account for retreat personality and nearby allies/enemies; they recover to 80% HP before returning and follow allied waves into pushes. Towers prioritize creeps and punish exposed heroes. Ranged heroes cannot safely outrange towers.
+
+At four minutes, the off-lane Central Power Node activates. Heroes can leave their lanes to contest it for team XP and 90 seconds of empowered wave spawns. It respawns three minutes after capture. Existing small camps and the Idol remain. The spectator view shows phase labels, objective status and empowered-wave timers; the event CSV includes AI decisions and node damage/captures. See [the current design](docs/DESIGN.md) for exact pacing values.
